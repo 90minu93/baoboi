@@ -248,7 +248,7 @@ Thêm một khối CSS `.mp[data-theme="tên"]` chứa các biến `--mp-*`, r�
 Theo thứ tự dự kiến:
 
 - [ ] Làm sáng dòng bài đang phát trong playlist
-- [ ] Dòng "Player by 90minutes" và số phiên bản ở header
+- [ ] Hiển thị số phiên bản ở header
 - [ ] Đổi nốt các ký tự Unicode còn lại sang SVG
 - [ ] Thanh tiến trình ô vuông cho mp3, khung Drive gọn
 - [ ] Thanh tiến trình và tua cho YouTube / SoundCloud
