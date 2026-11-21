@@ -34,6 +34,10 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
 .mp .mp-btn.mp-sm{padding:3px 9px;font-size:13px;min-height:28px}
 .mp .mp-btn.mp-pri{background:var(--mp-accent);border-color:var(--mp-accent);color:var(--mp-accent-ink)}
 .mp .mp-btn.mp-x{color:var(--mp-warn)}
+.mp .mp-ic{width:1em;height:1em;flex:none;display:block}
+.mp .mp-btn.mp-sm .mp-ic{width:13px;height:13px}
+.mp label .mp-ic,.mp .mp-hint .mp-ic{display:inline-block;vertical-align:-.15em}
+.mp label .mp-ic{margin-right:.4em}
 .mp .mp-btn:focus-visible,.mp input:focus-visible,.mp select:focus-visible{outline:2px solid var(--mp-accent);outline-offset:1px}
 .mp input[type=url],.mp input[type=text],.mp select{font:inherit;color:var(--mp-ink);background:var(--mp-paper);border:1px solid var(--mp-line);border-radius:8px;padding:6px 10px;min-width:0;max-width:100%}
 .mp input[type=url]{width:100%}
@@ -115,8 +119,10 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
 /* now playing */
 .mp.mp-full .mp-np{margin-top:12px;padding:10px;background:var(--mp-paper);border:2px solid var(--mp-line);border-radius:2px}
 .mp.mp-full .mp-sub{font-size:11px;color:var(--mp-muted);text-transform:none;letter-spacing:normal}
-/* cursor: steady while paused, blinking while playing (the hidden .mp-mini-play gets .mp-on when playing) */
-.mp.mp-full .mp-now::before{content:"▮";content:"▮" / "";display:inline-block;margin-right:.5em;color:var(--mp-playing)}
+/* play marker: a CSS triangle (no Unicode glyph), steady while paused, blinking while playing (the hidden .mp-mini-play gets .mp-on when playing).
+   Every title row keeps the same slot (a transparent triangle), so the playing row is not indented. */
+.mp.mp-full .mp-now::before,.mp.mp-full .mp-pl-t::before{content:"";display:inline-block;width:0;height:0;margin-right:.6em;vertical-align:-1px;border-style:solid;border-width:5px 0 5px 8px;border-color:transparent}
+.mp.mp-full .mp-now::before{border-left-color:var(--mp-playing)}
 .mp.mp-full .mp-mini-play.mp-on ~ .mp-body .mp-now::before,.mp.mp-full .mp-mini-play.mp-on ~ .mp-body .mp-pl li.mp-cur .mp-pl-t::before{animation:mp-blink 1s steps(1,end) infinite}
 @media (prefers-reduced-motion:reduce){.mp.mp-full .mp-mini-play.mp-on ~ .mp-body .mp-now::before,.mp.mp-full .mp-mini-play.mp-on ~ .mp-body .mp-pl li.mp-cur .mp-pl-t::before{animation:none}}
 /* players */
@@ -140,7 +146,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
 .mp.mp-full .mp-pl-t,.mp.mp-full .mp-pl-s,.mp.mp-full .mp-pl-in{text-transform:none;letter-spacing:normal}
 .mp.mp-full .mp-pl-s{font-size:11px;color:var(--mp-muted)}
 .mp.mp-full .mp-pl li.mp-cur .mp-pl-t{font-weight:700;color:var(--mp-playing)}
-.mp.mp-full .mp-pl li.mp-cur .mp-pl-t::before{content:"▮";content:"▮" / "";margin-right:.5em;color:var(--mp-playing)}
+.mp.mp-full .mp-pl li.mp-cur .mp-pl-t::before{content:"";border-left-color:var(--mp-playing)}
 /* toast */
 .mp.mp-full .mp-toast{font-size:12px;color:var(--mp-ink);background:var(--mp-panel);border:2px solid var(--mp-accent);border-radius:2px;box-shadow:3px 3px 0 var(--mp-shadow)}
 /* small screens (down to about 360px): tighter spacing, no horizontal overflow */
@@ -159,11 +165,12 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
 <div id="app"></div>
 
 <script id="mp-js">
-/* Personal Music Player — a single global: window.MusicPlayer
+/* Retro Player — a single global: window.MusicPlayer
    Usage: MusicPlayer.mount(el, {mode:'full'|'mini', lang:<key of I18N>, theme:<name in THEMES>}) */
 (function(){
   'use strict';
-  var KEY = 'musicplayer-v1';
+  var KEY = 'musicplayer-v2';
+  var KEY_V1 = 'musicplayer-v1'; /* old format: only read once to migrate, never written or deleted */
   var YT_ORIGIN = 'https://www.youtube.com';
   var SLEEP_OPTS = [0,15,30,45,60,90];
   var AUDIO_RE = /\.(mp3|m4a|aac|ogg|oga|opus|wav|webm|flac)(\?|#|$)/i;
@@ -173,16 +180,16 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   /* All UI text lives in I18N; English is the base language. To add a language, add a block such as
      I18N.vi = {...}. Keys missing from a language fall back to en, then to the key name itself. */
   var I18N = {
-    en:{ph:'Paste a YouTube, SoundCloud, mp3 or Google Drive link',play:'▶ Play',stop:'■ Stop',add:'+ Add',bad:'Invalid link',
-        pl:'Playlist',empty:'No tracks yet.',rename:'Edit title / artist',remove:'Remove from playlist',added:'Added to playlist',dup:'This link is already in the playlist',
+    en:{ph:'Paste a YouTube, SoundCloud, mp3 or Google Drive link',play:'Play',stop:'Stop',add:'+ Add',bad:'Invalid link',local:'Local files can’t be added to the playlist. Use a direct link (http/https).',
+        pl:'Playlist',plDefault:'Default',plNew:'New playlist',empty:'No tracks yet.',rename:'Edit title / artist',remove:'Remove from playlist',added:'Added to playlist',dup:'This link is already in the playlist',
         ttl:'Title',artist:'Artist',
-        vol:'🔊 Volume',sleep:'⏾ Sleep timer',off:'Off',min:'min',left:'stops in {m} min',slept:'Music paused by the sleep timer',
+        vol:'🔊 Volume',volNote:'Use your device volume buttons',sleep:'Sleep timer',off:'Off',min:'min',left:'stops in {m} min',slept:'Music paused by the sleep timer',
         pause:'Pause',resume:'Play',prev:'Previous track',next:'Next track',collapse:'Collapse',expand:'Expand',
         exp:'⤓ Export JSON',imp:'⤒ Import JSON',impOk:'Imported {n} new tracks',impBad:'Invalid JSON file',
         open:'Open original link',scFail:'Could not load SoundCloud',
         blocked:'Browser blocked autoplay, press ▶',
-        title:'Music Player',heading:'♪ Music Player',menu:'♪ Music',link:'↗ Link',site:'Link',yt:'YouTube',sc:'SoundCloud',gd:'Google Drive',
-        hint:'The playlist is stored in this browser. To use it elsewhere: Export JSON here, then Import JSON there. Title, artist and cover are fetched when you add a track (set them yourself with ✎ for Drive). Quality can only be estimated for direct mp3 links. Drive: share with “Anyone with the link”. iPhone lock screen: only direct mp3 links keep playing.'}
+        title:'Retro Player',heading:'♪ Retro Player',menu:'♪ Music',link:'↗ Link',site:'Link',yt:'YouTube',sc:'SoundCloud',gd:'Google Drive',
+        hint:'The playlist is stored in this browser. To use it elsewhere: Export JSON here, then Import JSON there. Title, artist and cover are fetched when you add a track (set them yourself with {pencil} for Drive). Quality can only be estimated for direct mp3 links. Drive: share with “Anyone with the link”. iPhone lock screen: only direct mp3 links keep playing.'}
   };
 
   /* Themes: add a CSS block .mp[data-theme="name"] and the name here. Unknown names fall back to 'dark'. */
@@ -193,21 +200,66 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   /* ---------- state (localStorage) ---------- */
   function safeThumb(s){ return typeof s==='string' && /^(https?:\/\/|data:image\/)/i.test(s) ? s : ''; }
   function pick(x){ return {id:x.id, url:x.url, name:x.name, artist:x.artist, thumb:x.thumb, quality:x.quality, m:x.m?1:0}; }
-  function loadState(){
-    var s = {}; try{ s = JSON.parse(localStorage.getItem(KEY)) || {}; }catch(e){}
-    var list = Array.isArray(s.list) ? s.list.filter(function(x){ return x && typeof x.url==='string'; }) : [];
-    return {list:list.map(function(x){ return {id:x.id||newId(), url:x.url, name:String(x.name||''), artist:String(x.artist||''), thumb:safeThumb(x.thumb), quality:String(x.quality||''), m:x.m?1:0}; }),
-            idx:typeof s.idx==='number'?s.idx:-1, vol:typeof s.vol==='number'?s.vol:80, plOpen:s.plOpen!==false,
+  function cleanTracks(a){
+    return (Array.isArray(a) ? a : []).filter(function(x){ return x && typeof x.url==='string'; }).map(function(x){
+      return {id:x.id||newId(), url:x.url, name:String(x.name||''), artist:String(x.artist||''), thumb:safeThumb(x.thumb), quality:String(x.quality||''), m:x.m?1:0};
+    });
+  }
+  function readJson(key){
+    try{ var s = JSON.parse(localStorage.getItem(key)); return s && typeof s==='object' && !Array.isArray(s) ? s : null; }catch(e){ return null; }
+  }
+  /* fields carried over from v1 with the same meaning (idx = position of the current track in the selected playlist) */
+  function baseState(s){
+    return {idx:typeof s.idx==='number'?s.idx:-1, vol:typeof s.vol==='number'?s.vol:80, plOpen:s.plOpen!==false,
             url:typeof s.url==='string'?s.url:'', lang:s.lang, theme:s.theme};
+  }
+  /* v2 = {v:2, lists:[{id,name,list:[tracks]}], cur:<selected playlist id>, idx, vol, plOpen, url, lang, theme}; null when unusable */
+  function fromV2(s){
+    if(!s || s.v!==2 || !Array.isArray(s.lists)) return null;
+    var ids = [], lists = [];
+    s.lists.forEach(function(pl){
+      if(!pl || typeof pl!=='object' || !Array.isArray(pl.list)) return;
+      var id = typeof pl.id==='string' && pl.id ? pl.id : newId();
+      while(ids.indexOf(id)>=0) id = newId();
+      ids.push(id);
+      lists.push({id:id, name:String(pl.name||'').trim() || I18N.en.plNew, list:cleanTracks(pl.list)});
+    });
+    if(!lists.length) return null;
+    var st = baseState(s); st.lists = lists;
+    st.cur = typeof s.cur==='string' && ids.indexOf(s.cur)>=0 ? s.cur : ids[0];
+    return st;
+  }
+  /* v1 -> v2: every old track goes into one playlist named Default; v1 itself is left untouched */
+  function fromV1(s){
+    var st = baseState(s || {});
+    st.lists = [{id:newId(), name:I18N.en.plDefault, list:cleanTracks(s && s.list)}];
+    st.cur = st.lists[0].id;
+    return st;
+  }
+  function serialize(st){
+    return {v:2, lists:st.lists.map(function(pl){ return {id:pl.id, name:pl.name, list:pl.list.map(pick)}; }), cur:st.cur,
+            idx:st.idx, vol:st.vol, plOpen:st.plOpen, url:st.url, lang:st.lang, theme:st.theme};
+  }
+  /* S.list is always the track array of the selected playlist, so the rest of the code keeps working on it */
+  function loadState(){
+    var st = fromV2(readJson(KEY));
+    if(!st){
+      st = fromV1(readJson(KEY_V1)); /* no usable v2: rebuild from v1, or start with an empty Default playlist */
+      try{ localStorage.setItem(KEY, JSON.stringify(serialize(st))); }catch(e){}
+    }
+    for(var i=0;i<st.lists.length;i++) if(st.lists[i].id===st.cur) st.list = st.lists[i].list;
+    return st;
   }
   function newId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
   var S = loadState();
-  function save(){ try{ localStorage.setItem(KEY, JSON.stringify({v:1,list:S.list.map(pick),idx:S.idx,vol:S.vol,plOpen:S.plOpen,url:S.url,lang:S.lang,theme:S.theme})); }catch(e){} }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(serialize(S))); }catch(e){} }
 
   /* ---------- url helpers ---------- */
   function ytId(u){ var m = String(u||'').match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/live\/|\/shorts\/)([A-Za-z0-9_-]{11})/); return m ? m[1] : null; }
   function driveId(u){ var m = String(u||'').match(DRIVE_RE); return m ? m[1] : null; }
   function isSc(u){ return SC_RE.test(String(u||'')); }
+  /* local file paths: drive letters (C:\ or C:/), file://, and absolute paths starting with / */
+  function isLocalPath(u){ u = String(u||'').trim(); return /^[a-zA-Z]:[\\/]/.test(u) || /^file:/i.test(u) || /^\//.test(u); }
   function playable(u){ u = String(u||''); return !!(ytId(u) || driveId(u) || isSc(u) || (/^https?:\/\//i.test(u) && AUDIO_RE.test(u))); }
   function dupKey(u){
     var y = ytId(u), d = driveId(u); u = String(u).trim();
@@ -375,10 +427,11 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
      .then(function(){ info._busy = 0; refreshInfo(info); });
   }
   function enrichMissing(){
-    S.list.filter(function(x){ return !x.m && !driveId(x.url); }).forEach(function(x, i){ setTimeout(function(){ enrich(x); }, i*400); });
+    S.lists.reduce(function(a, pl){ return a.concat(pl.list); }, []).filter(function(x){ return !x.m && !driveId(x.url); }).forEach(function(x, i){ setTimeout(function(){ enrich(x); }, i*400); });
   }
   function refreshInfo(info){
     if(S.list.indexOf(info)>=0){ save(); if(MP.edit===null) renderPlaylist(); }
+    else if(S.lists.some(function(pl){ return pl.list.indexOf(info)>=0; })) save();
     renderNow();
   }
   function gotMeta(m){
@@ -395,6 +448,28 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   function t(k){ var d = I18N[O.lang]; return (d && d[k]) || I18N.en[k] || k; }
   function toast(msg){ var el = q('toast'); if(!el) return; el.textContent = msg; el.classList.add('mp-on'); clearTimeout(toastT); toastT = setTimeout(function(){ el.classList.remove('mp-on'); }, 2200); }
 
+  /* iOS ignores audio.volume (it always reads back 1): test it directly; if the test cannot run, fall back to iOS detection */
+  var volLockedCache = null;
+  function volLocked(){
+    if(volLockedCache===null){
+      try{ var a = new Audio(); a.volume = 0.5; volLockedCache = a.volume === 1; }
+      catch(e){ volLockedCache = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1); }
+    }
+    return volLockedCache;
+  }
+
+  /* icons: inline SVG with fill="currentColor" (Unicode symbols turn into emoji on iOS) */
+  function svg(d, vb){ return '<svg class="mp-ic" viewBox="'+(vb||'0 0 16 16')+'" fill="currentColor" aria-hidden="true" focusable="false"><path d="'+d+'"/></svg>'; }
+  var ICON = {
+    prev:svg('M3 2h2v12H3zM14 2v12L6 8z'),
+    next:svg('M11 2h2v12h-2zM2 2v12l8-6z'),
+    play:svg('M4 2v12l10-6z'),
+    pause:svg('M3 2h4v12H3zM9 2h4v12H9z'),
+    stop:svg('M3 3h10v10H3z'),
+    pencil:svg('M2 14l1-4 7.5-7.5 3 3L6 13zM10.5 2.5l1-1 3 3-1 1z'),
+    moon:svg('M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z', '0 0 24 24')
+  };
+
   var HTML =
     '<button type="button" class="mp-btn mp-mini-play" data-mp="mini"></button>'+
     '<button type="button" class="mp-btn mp-tog" data-mp="tog" aria-haspopup="true"></button>'+
@@ -402,12 +477,13 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
       '<div class="mp-head"><h1 data-mp="heading"></h1></div>'+
       '<div class="mp-frame" data-mp="frame"></div>'+
       '<div class="mp-np" data-mp="np" hidden><img class="mp-cover" data-mp="cover" alt="" hidden referrerpolicy="no-referrer"><div class="mp-np-t"><div class="mp-now" data-mp="now" aria-live="polite"></div><div class="mp-sub" data-mp="sub"></div></div></div>'+
-      '<div class="mp-big"><button type="button" class="mp-btn" data-mp="bprev">⏮</button><button type="button" class="mp-btn mp-pri" data-mp="bplay">▶</button><button type="button" class="mp-btn" data-mp="bnext">⏭</button></div>'+
+      '<div class="mp-big"><button type="button" class="mp-btn" data-mp="bprev">'+ICON.prev+'</button><button type="button" class="mp-btn mp-pri" data-mp="bplay">'+ICON.play+'</button><button type="button" class="mp-btn" data-mp="bnext">'+ICON.next+'</button></div>'+
       '<div class="mp-row"><input type="url" data-mp="url" inputmode="url" autocomplete="off" spellcheck="false"></div>'+
       '<div class="mp-row"><button type="button" class="mp-btn mp-pri mp-sm" data-mp="play"></button><button type="button" class="mp-btn mp-sm" data-mp="stop"></button><button type="button" class="mp-btn mp-sm" data-mp="add"></button><a class="mp-btn mp-sm" data-mp="link" target="_blank" rel="noopener noreferrer"></a></div>'+
-      '<div class="mp-row"><label data-mp="volL"></label><input type="range" data-mp="vol" min="0" max="100" step="5"><span class="mp-hint" data-mp="volV" style="margin:0;min-width:38px"></span></div>'+
+      '<div class="mp-row" data-mp="volRow"><label data-mp="volL"></label><input type="range" data-mp="vol" min="0" max="100" step="5"><span class="mp-hint" data-mp="volV" style="margin:0;min-width:38px"></span></div>'+
+      '<p class="mp-hint" data-mp="volNote" hidden></p>'+
       '<div class="mp-row"><label data-mp="sleepL"></label><select data-mp="sleep">'+SLEEP_OPTS.map(function(m){ return '<option value="'+m+'"></option>'; }).join('')+'</select><span class="mp-hint" data-mp="sleepLeft" style="margin:0"></span></div>'+
-      '<div class="mp-row mp-sp"><span class="mp-grp"><button type="button" class="mp-btn mp-sm" data-mp="plTog"></button><strong style="font-size:13px"><span data-mp="plT"></span> (<span data-mp="plN">0</span>)</strong></span><span class="mp-grp"><button type="button" class="mp-btn mp-sm" data-mp="prev">⏮</button><button type="button" class="mp-btn mp-sm" data-mp="next">⏭</button></span></div>'+
+      '<div class="mp-row mp-sp"><span class="mp-grp"><button type="button" class="mp-btn mp-sm" data-mp="plTog"></button><strong style="font-size:13px"><span data-mp="plT"></span> (<span data-mp="plN">0</span>)</strong></span><span class="mp-grp"><button type="button" class="mp-btn mp-sm" data-mp="prev">'+ICON.prev+'</button><button type="button" class="mp-btn mp-sm" data-mp="next">'+ICON.next+'</button></span></div>'+
       '<ol class="mp-pl" data-mp="list"></ol>'+
       '<p class="mp-hint" data-mp="empty"></p>'+
       '<div class="mp-row"><button type="button" class="mp-btn mp-sm" data-mp="exp"></button><button type="button" class="mp-btn mp-sm" data-mp="imp"></button><input type="file" data-mp="file" accept="application/json,.json" hidden></div>'+
@@ -439,15 +515,16 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     if(document.activeElement!==q('url')) q('url').value = S.url;
     q('link').href = linkHref();
     q('link').title = t('open');
-    q('play').textContent = t('play'); q('stop').textContent = t('stop'); q('add').textContent = t('add');
+    q('play').innerHTML = ICON.play + esc(t('play')); q('stop').innerHTML = ICON.stop + esc(t('stop')); q('add').textContent = t('add');
     q('volL').textContent = t('vol'); q('vol').value = S.vol; q('vol').style.setProperty('--mp-fill', S.vol+'%'); q('volV').textContent = S.vol+'%';
     q('vol').setAttribute('aria-label', t('vol'));
-    q('sleepL').textContent = t('sleep'); q('sleep').setAttribute('aria-label', t('sleep'));
+    var vl = volLocked(); q('volRow').hidden = vl; q('volNote').hidden = !vl; q('volNote').textContent = t('volNote');
+    q('sleepL').innerHTML = ICON.moon + esc(t('sleep')); q('sleep').setAttribute('aria-label', t('sleep'));
     Array.prototype.forEach.call(q('sleep').options, function(o){ o.textContent = +o.value ? o.value+' '+t('min') : t('off'); });
     q('plT').textContent = t('pl'); q('empty').textContent = t('empty');
     ['prev','bprev'].forEach(function(n){ q(n).setAttribute('aria-label', t('prev')); q(n).title = t('prev'); });
     ['next','bnext'].forEach(function(n){ q(n).setAttribute('aria-label', t('next')); q(n).title = t('next'); });
-    q('exp').textContent = t('exp'); q('imp').textContent = t('imp'); q('hint').textContent = t('hint');
+    q('exp').textContent = t('exp'); q('imp').textContent = t('imp'); q('hint').innerHTML = esc(t('hint')).replace('{pencil}', ICON.pencil);
     R.setAttribute('lang', O.lang);
     applyTheme(); renderPlaylist(); renderNow(); sleepCheck();
   }
@@ -468,7 +545,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   function updPlay(){
     if(!R) return;
     var on = MP.playing, lbl = t(on?'pause':'resume');
-    [q('mini'), q('bplay')].forEach(function(b){ b.textContent = on ? '❚❚' : '▶'; b.setAttribute('aria-label', lbl); });
+    [q('mini'), q('bplay')].forEach(function(b){ b.innerHTML = on ? ICON.pause : ICON.play; b.setAttribute('aria-label', lbl); });
     q('mini').classList.toggle('mp-on', on);
     q('mini').title = [nowTitle(), sleepText()].filter(Boolean).join(' · ') || lbl;
     q('bplay').title = lbl;
@@ -493,7 +570,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
       var th = it.thumb ? '<img src="'+esc(it.thumb)+'" alt="" loading="lazy" referrerpolicy="no-referrer">' : '♪';
       return '<li class="'+cls+'"><button type="button" class="mp-pl-name" data-i="'+i+'" title="'+nm+' — '+sub+'">'+
         '<span class="mp-th">'+th+'</span><span class="mp-pl-txt"><span class="mp-pl-t">'+nm+'</span><span class="mp-pl-s">'+sub+'</span></span></button>'+
-        '<button type="button" class="mp-btn mp-sm" data-ed="'+i+'" aria-label="'+esc(t('rename'))+'" title="'+esc(t('rename'))+'">✎</button>'+
+        '<button type="button" class="mp-btn mp-sm" data-ed="'+i+'" aria-label="'+esc(t('rename'))+'" title="'+esc(t('rename'))+'">'+ICON.pencil+'</button>'+
         '<button type="button" class="mp-btn mp-sm mp-x" data-del="'+i+'" aria-label="'+esc(t('remove'))+'" title="'+esc(t('remove'))+'">✕</button></li>';
     }).join('');
     var inp = ul.querySelector('.mp-pl-in'); if(inp){ inp.focus(); inp.select(); }
@@ -658,11 +735,13 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     var c = L.findIndex(function(x){ return x.id===MP.item; });
     playItem(c>=0 ? c+d : (d>0 ? 0 : L.length-1));
   }
-  function addTrack(u, name, silent, extra){
+  function addTrack(u, name, silent, extra){ return addTrackTo(S.list, u, name, silent, extra); }
+  function addTrackTo(list, u, name, silent, extra){
     u = String(u||'').trim();
+    if(isLocalPath(u)){ if(!silent) toast(t('local')); return false; }
     if(!playable(u)){ if(!silent) toast(t('bad')); return false; }
     var k = dupKey(u);
-    if(S.list.some(function(x){ return dupKey(x.url)===k; })){ if(!silent) toast(t('dup')); return false; }
+    if(list.some(function(x){ return dupKey(x.url)===k; })){ if(!silent) toast(t('dup')); return false; }
     var it = {id:newId(), url:u, name:String(name||'').trim(), artist:'', thumb:'', quality:'', m:0};
     if(extra){
       if(typeof extra.artist==='string') it.artist = extra.artist.trim();
@@ -676,7 +755,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
       if(ps.m) it.m = 1;
       it._size = ps._size; it._dur = ps._dur;
     }
-    S.list.push(it);
+    list.push(it);
     if(!silent){ S.plOpen = true; save(); renderPlaylist(); toast(t('added')); enrich(it); }
     return true;
   }
@@ -695,8 +774,72 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   }
   function setSleep(m){ clearInterval(sleepTick); sleepAt = m ? Date.now()+m*60000 : 0; if(m) sleepTick = setInterval(sleepCheck, 5000); sleepCheck(); }
 
-  /* ---------- Xuất / Nhập JSON: {"app":"music-player","v":1,"list":[{url,name,artist,thumb,quality}]} ---------- */
-  function exportData(){ return {app:'music-player', v:1, exported:new Date().toISOString(), list:S.list.map(function(x){ return {url:x.url, name:x.name, artist:x.artist, thumb:x.thumb, quality:x.quality, m:x.m?1:0}; })}; }
+  /* ---------- playlists (S.list always points at the selected playlist's track array) ---------- */
+  function nameKey(n){ return String(n==null?'':n).trim().toLowerCase(); }
+  function findPl(id){ for(var i=0;i<S.lists.length;i++) if(S.lists[i].id===id) return S.lists[i]; return null; }
+  /* empty name -> default name from I18N.en; duplicate name -> numeric suffix ("Name 2", "Name 3", ...) */
+  function uniqueName(name, exceptId){
+    var base = String(name==null?'':name).trim() || I18N.en.plNew, n = base, i = 1;
+    function taken(x){ return S.lists.some(function(pl){ return pl.id!==exceptId && nameKey(pl.name)===nameKey(x); }); }
+    while(taken(n)){ i++; n = base+' '+i; }
+    return n;
+  }
+  function stopPlayback(){ MP.item = null; MP.pasted = null; MP.edit = null; clearPlayer(); }
+  function getPlaylists(){
+    return {lists:S.lists.map(function(pl){ return {id:pl.id, name:pl.name, count:pl.list.length}; }), current:S.cur};
+  }
+  function createPlaylist(name){
+    var pl = {id:newId(), name:uniqueName(name), list:[]};
+    S.lists.push(pl); save();
+    return pl.id;
+  }
+  function renamePlaylist(id, name){
+    var pl = findPl(id), nm = String(name==null?'':name).trim();
+    if(!pl || !nm) return false;
+    pl.name = uniqueName(nm, pl.id); save();
+    return true;
+  }
+  /* switching stops the current playback first (simple and safe) */
+  function switchPlaylist(id){
+    var pl = findPl(id); if(!pl) return false;
+    if(pl.id===S.cur) return true;
+    stopPlayback();
+    S.cur = pl.id; S.list = pl.list; S.idx = -1; save();
+    if(R){ renderNow(); renderPlaylist(); q('link').href = linkHref(); }
+    return true;
+  }
+  /* the last playlist cannot be deleted; deleting the selected one selects the first remaining */
+  function deletePlaylist(id){
+    var i = S.lists.indexOf(findPl(id));
+    if(i<0 || S.lists.length<2) return false;
+    if(id===S.cur) switchPlaylist(S.lists[i===0 ? 1 : 0].id);
+    S.lists.splice(i, 1); save();
+    return true;
+  }
+  /* skipped (false) when the target already has that link */
+  function moveTrack(url, fromId, toId){
+    var from = findPl(fromId), to = findPl(toId);
+    if(typeof url!=='string' || !from || !to || from===to) return false;
+    var k = dupKey(url), i = -1, j;
+    for(j=0;j<from.list.length;j++) if(from.list[j].url===url){ i = j; break; }
+    if(i<0) for(j=0;j<from.list.length;j++) if(dupKey(from.list[j].url)===k){ i = j; break; }
+    if(i<0) return false;
+    if(to.list.some(function(x){ return dupKey(x.url)===k; })) return false;
+    var tr = from.list.splice(i, 1)[0];
+    to.list.push(tr);
+    if(from.id===S.cur){
+      if(MP.item===tr.id){ MP.item = null; clearPlayer(); }
+      S.idx = S.list.findIndex(function(x){ return x.id===MP.item; });
+    }
+    if(MP.edit===tr.id) MP.edit = null;
+    save();
+    if(R){ renderNow(); renderPlaylist(); }
+    return true;
+  }
+
+  /* ---------- Xuất / Nhập JSON: {"app":"music-player","v":2,"lists":[{"name":...,"list":[{url,name,artist,thumb,quality,m}]}]} (v1 files are still accepted) ---------- */
+  function exportTracks(list){ return list.map(function(x){ return {url:x.url, name:x.name, artist:x.artist, thumb:x.thumb, quality:x.quality, m:x.m?1:0}; }); }
+  function exportData(){ return {app:'music-player', v:2, lists:S.lists.map(function(pl){ return {name:pl.name, list:exportTracks(pl.list)}; })}; }
   function exportFile(){
     var blob = new Blob([JSON.stringify(exportData(), null, 2)], {type:'application/json'});
     var a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -704,16 +847,36 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
   }
-  /* nhận: định dạng trên hoặc mảng [{url,name}]. File cũ (chưa có artist/thumb) vẫn nhập được. Gộp, bỏ bài trùng. */
-  function importData(data){
-    if(typeof data==='string'){ try{ data = JSON.parse(data); }catch(e){ return -1; } }
-    var arr = Array.isArray(data) ? data : data && Array.isArray(data.list) ? data.list : null;
-    if(!arr) return -1;
+  /* import helpers: also accepts a bare array of {url,name} or URL strings; old files without artist/thumb still import */
+  function importTracks(list, arr){
     var n = 0;
     arr.forEach(function(x){
-      if(x && typeof x==='object'){ if(addTrack(x.url, x.name, true, x)) n++; }
-      else if(typeof x==='string' && addTrack(x, '', true)) n++;
+      if(x && typeof x==='object'){ if(addTrackTo(list, x.url, x.name, true, x)) n++; }
+      else if(typeof x==='string' && addTrackTo(list, x, '', true)) n++;
     });
+    return n;
+  }
+  /* v2: each playlist in the file is merged into the playlist with the same name (duplicates skipped) or created.
+     v1 (or a bare array): merged into the selected playlist. Returns the number of new tracks, or -1 for a bad file;
+     the file is fully checked before anything is changed. */
+  function importData(data){
+    if(typeof data==='string'){ try{ data = JSON.parse(data); }catch(e){ return -1; } }
+    var n = 0;
+    if(data && typeof data==='object' && !Array.isArray(data) && data.v===2){
+      if(!Array.isArray(data.lists)) return -1;
+      var ok = data.lists.filter(function(pl){ return pl && typeof pl==='object' && Array.isArray(pl.list); });
+      if(data.lists.length && !ok.length) return -1;
+      ok.forEach(function(pl){
+        var name = String(pl.name==null?'':pl.name).trim(), dest = null;
+        if(name) S.lists.forEach(function(x){ if(!dest && nameKey(x.name)===nameKey(name)) dest = x; });
+        if(!dest){ dest = {id:newId(), name:uniqueName(name), list:[]}; S.lists.push(dest); }
+        n += importTracks(dest.list, pl.list);
+      });
+    } else {
+      var arr = Array.isArray(data) ? data : data && Array.isArray(data.list) ? data.list : null;
+      if(!arr) return -1;
+      n = importTracks(S.list, arr);
+    }
     S.plOpen = true; save(); renderPlaylist(); enrichMissing();
     return n;
   }
@@ -792,6 +955,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     if(typeof el==='string') el = document.querySelector(el);
     if(!el) throw new Error('MusicPlayer.mount: element not found');
     unmount(); MP.edit = null; MP.item = null; MP.pasted = null;
+    S = loadState(); /* migrates v1 -> v2 when needed */
     opts = opts || {};
     O = {mode: opts.mode==='mini' ? 'mini' : 'full',
          lang: normLang(opts.lang!=null ? opts.lang : S.lang),
@@ -818,10 +982,12 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     setTheme: function(th){ O.theme = normTheme(th); applyTheme(); },
     setVolume: setVol, setSleep: setSleep,
     exportJSON: function(){ return JSON.stringify(exportData(), null, 2); },
-    importJSON: function(x){ return importData(x); },
+    importJSON: function(x){ var n = importData(x); if(n<0) toast(t('impBad')); return n; },
     getList: function(){ return S.list.map(function(x){ return {url:x.url, name:x.name, artist:x.artist, thumb:x.thumb, quality:x.quality}; }); },
     state: function(){ return {playing:MP.playing, kind:MP.kind, name:nowTitle()}; },
-    version: '1.2.0'
+    getPlaylists: getPlaylists, createPlaylist: createPlaylist, renamePlaylist: renamePlaylist,
+    deletePlaylist: deletePlaylist, switchPlaylist: switchPlaylist, moveTrack: moveTrack,
+    version: '1.3.1'
   };
   window.MusicPlayer = api;
 })();
