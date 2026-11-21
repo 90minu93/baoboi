@@ -18,14 +18,19 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
 }
 /* Themes: one block per theme, defining the --mp-* variables. Each color falls back to a host variable
    (--paper, --ink, ...) when the page that embeds the player defines one. --mp-playing, --mp-shadow and
-   --mp-font have no host fallback and are used by full mode only. */
+   --mp-font, --mp-playing-bg and --mp-playing-glow have no host fallback and are used by full mode only. */
 .mp[data-theme="dark"]{
   --mp-paper:var(--paper,#0b1020); --mp-panel:var(--panel,#131a33); --mp-ink:var(--ink,#dbe4ff);
   --mp-muted:var(--muted,#7080a8); --mp-line:var(--line,#243056); --mp-accent:var(--accent,#5b8cff);
   --mp-accent-ink:var(--accent-ink,#0b1020); --mp-warn:var(--warn,#E5806B); --mp-soft:var(--soft,#1b2447);
   --mp-playing:#ffd166; --mp-shadow:#050810;
+  --mp-playing-bg:rgba(255,209,102,.12); --mp-playing-glow:rgba(255,209,102,.5);
   --mp-font:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;
   color-scheme:dark;
+}
+/* playing-bg / playing-glow follow --mp-playing where color-mix is supported (the rgba values above are the fallback) */
+@supports (background:color-mix(in srgb,red,blue)){
+  .mp[data-theme="dark"]{--mp-playing-bg:color-mix(in srgb,var(--mp-playing) 12%,transparent);--mp-playing-glow:color-mix(in srgb,var(--mp-playing) 50%,transparent)}
 }
 .mp *,.mp *::before,.mp *::after{box-sizing:border-box}
 .mp [hidden]{display:none!important}
@@ -93,6 +98,11 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
 .mp.mp-full .mp-body{max-width:560px;min-width:0;margin:0 auto;background:var(--mp-panel);border:2px solid var(--mp-line);border-radius:2px;padding:16px;box-shadow:3px 3px 0 var(--mp-shadow)}
 .mp.mp-full .mp-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 4px;padding-bottom:10px;border-bottom:2px solid var(--mp-line)}
 .mp.mp-full .mp-head h1{margin:0;font-size:13px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--mp-accent)}
+/* header info (author line + version): display only, right-aligned, wraps under the title and stays right-aligned when space is short */
+.mp.mp-full .mp-by{position:relative;display:flex;flex-direction:column;align-items:flex-end;margin-left:auto;text-align:right;line-height:1.3;color:var(--mp-muted);text-transform:none;letter-spacing:normal;user-select:none}
+.mp.mp-full .mp-by-1{font-size:11px}
+.mp.mp-full .mp-by-2{font-size:10px;opacity:.8}
+.mp .mp-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap}
 .mp.mp-full .mp-big{display:flex;justify-content:center;gap:12px;margin:16px 0 4px}
 .mp.mp-full .mp-big .mp-btn{min-width:56px;min-height:48px;font-size:18px}
 /* buttons: hard shadow, press = sink 2px and the shadow shrinks */
@@ -138,14 +148,19 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
 /* playlist */
 .mp.mp-full .mp-pl{margin-top:8px;padding:0 8px;max-height:min(50vh,420px);background:var(--mp-paper);border:2px solid var(--mp-line);border-radius:2px;scrollbar-width:thin;scrollbar-color:var(--mp-line) var(--mp-paper)}
 .mp.mp-full .mp-pl:empty{display:none}
-.mp.mp-full .mp-pl li{border-top:2px solid var(--mp-line);padding:6px 0}
+.mp.mp-full .mp-pl li{margin:0 -8px;padding:6px 8px;border-top:2px solid var(--mp-line)}
 .mp.mp-full .mp-pl li:first-child{border-top:0}
 .mp.mp-full .mp-pl-name{font-size:13px}
 .mp.mp-full .mp-pl-name:hover{background:var(--mp-soft)}
 .mp.mp-full .mp-th{width:36px;height:36px;border:2px solid var(--mp-line);border-radius:2px}
 .mp.mp-full .mp-pl-t,.mp.mp-full .mp-pl-s,.mp.mp-full .mp-pl-in{text-transform:none;letter-spacing:normal}
 .mp.mp-full .mp-pl-s{font-size:11px;color:var(--mp-muted)}
-.mp.mp-full .mp-pl li.mp-cur .mp-pl-t{font-weight:700;color:var(--mp-playing)}
+/* playing row: tinted background + 2px left bar (inset shadow, so nothing shifts); glow only while actually playing, paused keeps background and bar */
+.mp.mp-full .mp-pl li.mp-cur{background:var(--mp-playing-bg);box-shadow:inset 2px 0 0 var(--mp-playing)}
+.mp.mp-full .mp-pl li.mp-cur .mp-pl-t{font-weight:700;color:var(--mp-playing);padding:4px 8px;margin:-4px -8px}
+.mp.mp-full .mp-mini-play.mp-on ~ .mp-body .mp-pl li.mp-cur .mp-pl-t{text-shadow:0 0 6px var(--mp-playing-glow);animation:mp-glow 3.2s ease-in-out infinite}
+@keyframes mp-glow{0%,100%{text-shadow:0 0 3px var(--mp-playing-glow)}50%{text-shadow:0 0 8px var(--mp-playing-glow)}}
+@media (prefers-reduced-motion:reduce){.mp.mp-full .mp-mini-play.mp-on ~ .mp-body .mp-pl li.mp-cur .mp-pl-t{animation:none}}
 .mp.mp-full .mp-pl li.mp-cur .mp-pl-t::before{content:"";border-left-color:var(--mp-playing)}
 /* toast */
 .mp.mp-full .mp-toast{font-size:12px;color:var(--mp-ink);background:var(--mp-panel);border:2px solid var(--mp-accent);border-radius:2px;box-shadow:3px 3px 0 var(--mp-shadow)}
@@ -171,6 +186,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   'use strict';
   var KEY = 'musicplayer-v2';
   var KEY_V1 = 'musicplayer-v1'; /* old format: only read once to migrate, never written or deleted */
+  var VERSION = '1.3.2'; /* single source for MusicPlayer.version and the header */
   var YT_ORIGIN = 'https://www.youtube.com';
   var SLEEP_OPTS = [0,15,30,45,60,90];
   var AUDIO_RE = /\.(mp3|m4a|aac|ogg|oga|opus|wav|webm|flac)(\?|#|$)/i;
@@ -188,7 +204,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
         exp:'⤓ Export JSON',imp:'⤒ Import JSON',impOk:'Imported {n} new tracks',impBad:'Invalid JSON file',
         open:'Open original link',scFail:'Could not load SoundCloud',
         blocked:'Browser blocked autoplay, press ▶',
-        title:'Retro Player',heading:'♪ Retro Player',menu:'♪ Music',link:'↗ Link',site:'Link',yt:'YouTube',sc:'SoundCloud',gd:'Google Drive',
+        title:'Retro Player',heading:'♪ Retro Player',byline:'Player by 90minutes',verWord:'version',menu:'♪ Music',link:'↗ Link',site:'Link',yt:'YouTube',sc:'SoundCloud',gd:'Google Drive',
         hint:'The playlist is stored in this browser. To use it elsewhere: Export JSON here, then Import JSON there. Title, artist and cover are fetched when you add a track (set them yourself with {pencil} for Drive). Quality can only be estimated for direct mp3 links. Drive: share with “Anyone with the link”. iPhone lock screen: only direct mp3 links keep playing.'}
   };
 
@@ -474,7 +490,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     '<button type="button" class="mp-btn mp-mini-play" data-mp="mini"></button>'+
     '<button type="button" class="mp-btn mp-tog" data-mp="tog" aria-haspopup="true"></button>'+
     '<div class="mp-body" data-mp="body">'+
-      '<div class="mp-head"><h1 data-mp="heading"></h1></div>'+
+      '<div class="mp-head"><h1 data-mp="heading"></h1><div class="mp-by"><span class="mp-by-1" data-mp="byline" aria-hidden="true"></span><span class="mp-by-2" data-mp="ver" aria-hidden="true"></span><span class="mp-sr" data-mp="bysr"></span></div></div>'+
       '<div class="mp-frame" data-mp="frame"></div>'+
       '<div class="mp-np" data-mp="np" hidden><img class="mp-cover" data-mp="cover" alt="" hidden referrerpolicy="no-referrer"><div class="mp-np-t"><div class="mp-now" data-mp="now" aria-live="polite"></div><div class="mp-sub" data-mp="sub"></div></div></div>'+
       '<div class="mp-big"><button type="button" class="mp-btn" data-mp="bprev">'+ICON.prev+'</button><button type="button" class="mp-btn mp-pri" data-mp="bplay">'+ICON.play+'</button><button type="button" class="mp-btn" data-mp="bnext">'+ICON.next+'</button></div>'+
@@ -508,6 +524,8 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     q('tog').textContent = t('menu') + ' ' + (open ? '▴' : '▾');
     q('tog').setAttribute('aria-expanded', open?'true':'false');
     q('heading').textContent = t('heading');
+    q('byline').textContent = t('byline'); q('ver').textContent = 'v' + VERSION;
+    q('bysr').textContent = t('byline') + ', ' + t('verWord') + ' ' + VERSION;
     q('link').textContent = t('link');
     if(O.mode==='full') document.title = t('title');
     q('url').placeholder = t('ph');
@@ -560,20 +578,30 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     q('plTog').setAttribute('aria-label', t(open?'collapse':'expand'));
     ul.hidden = !open; q('empty').hidden = !open || L.length>0;
     ul.innerHTML = L.map(function(it,i){
-      var cls = (MP.item===it.id ? 'mp-cur' : '');
+      var cur = MP.item===it.id, cls = cur ? 'mp-cur' : '', ac = cur ? ' aria-current="true"' : '';
       if(MP.edit===it.id){
-        return '<li class="'+cls+' mp-edit"><span class="mp-pl-ed">'+
+        return '<li class="'+cls+' mp-edit"'+ac+'><span class="mp-pl-ed">'+
           '<input type="text" class="mp-pl-in" data-in="'+i+'" value="'+esc(it.name)+'" placeholder="'+esc(baseTitle(it.url))+'" aria-label="'+esc(t('ttl'))+'">'+
           '<input type="text" class="mp-pl-in" data-ar="'+i+'" value="'+esc(it.artist)+'" placeholder="'+esc(t('artist'))+'" aria-label="'+esc(t('artist'))+'"></span></li>';
       }
       var nm = esc(it.name || baseTitle(it.url)), sub = esc(subOf(it));
       var th = it.thumb ? '<img src="'+esc(it.thumb)+'" alt="" loading="lazy" referrerpolicy="no-referrer">' : '♪';
-      return '<li class="'+cls+'"><button type="button" class="mp-pl-name" data-i="'+i+'" title="'+nm+' — '+sub+'">'+
+      return '<li class="'+cls+'"'+ac+'><button type="button" class="mp-pl-name" data-i="'+i+'" title="'+nm+' — '+sub+'">'+
         '<span class="mp-th">'+th+'</span><span class="mp-pl-txt"><span class="mp-pl-t">'+nm+'</span><span class="mp-pl-s">'+sub+'</span></span></button>'+
         '<button type="button" class="mp-btn mp-sm" data-ed="'+i+'" aria-label="'+esc(t('rename'))+'" title="'+esc(t('rename'))+'">'+ICON.pencil+'</button>'+
         '<button type="button" class="mp-btn mp-sm mp-x" data-del="'+i+'" aria-label="'+esc(t('remove'))+'" title="'+esc(t('remove'))+'">✕</button></li>';
     }).join('');
     var inp = ul.querySelector('.mp-pl-in'); if(inp){ inp.focus(); inp.select(); }
+  }
+  /* keep the playing row visible: scrolls only the list box (never the page), and only when the row is out of view */
+  function revealCur(){
+    if(!R || O.mode!=='full') return;
+    var ul = q('list'), li = ul && ul.querySelector('li.mp-cur');
+    if(!li || ul.hidden) return;
+    var u = ul.getBoundingClientRect(), r = li.getBoundingClientRect();
+    var top = u.top + ul.clientTop, bottom = top + ul.clientHeight;
+    if(r.top < top) ul.scrollTop -= top - r.top;
+    else if(r.bottom > bottom) ul.scrollTop += r.bottom - bottom;
   }
 
   /* ---------- players (mỗi lúc chỉ 1 trình phát) ---------- */
@@ -728,7 +756,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     i = ((i % L.length) + L.length) % L.length;
     var it = L[i]; S.idx = i; MP.item = it.id; MP.pasted = null; save();
     if(playUrl(it.url)) enrich(it);
-    renderNow(); renderPlaylist(); q('link').href = it.url;
+    renderNow(); renderPlaylist(); revealCur(); q('link').href = it.url;
   }
   function step(d){
     var L = S.list; if(!L.length) return;
@@ -987,7 +1015,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     state: function(){ return {playing:MP.playing, kind:MP.kind, name:nowTitle()}; },
     getPlaylists: getPlaylists, createPlaylist: createPlaylist, renamePlaylist: renamePlaylist,
     deletePlaylist: deletePlaylist, switchPlaylist: switchPlaylist, moveTrack: moveTrack,
-    version: '1.3.1'
+    version: VERSION
   };
   window.MusicPlayer = api;
 })();
