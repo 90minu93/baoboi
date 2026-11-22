@@ -6,7 +6,7 @@
 
 Một file HTML duy nhất. Không framework, không build, không backend.
 
-![version](https://img.shields.io/badge/version-1.3.1-5b8cff?style=flat-square)
+![version](https://img.shields.io/badge/version-1.3.5-5b8cff?style=flat-square)
 ![single file](https://img.shields.io/badge/single-file-ffd166?style=flat-square)
 ![no build](https://img.shields.io/badge/build-none-243056?style=flat-square)
 ![backend](https://img.shields.io/badge/backend-none-243056?style=flat-square)
@@ -36,8 +36,8 @@ Một file HTML duy nhất. Không framework, không build, không backend.
 |---|---|
 | YouTube | iframe ẩn, điều khiển bằng IFrame API (postMessage) |
 | SoundCloud | Widget API chính thức, nạp khi phát bài SoundCloud đầu tiên |
-| Link trực tiếp `mp3` `m4a` `aac` `ogg` `opus` `wav` `webm` `flac` | thẻ `<audio>` |
-| Google Drive | thử `<audio>` qua link tải trực tiếp, lỗi thì chuyển sang iframe preview |
+| Link trực tiếp `mp3` `m4a` `aac` `ogg` `opus` `wav` `webm` `flac` | thẻ `<audio>` kèm thanh tiến trình ô vuông tự vẽ, tua được |
+| Google Drive | thử `<audio>` qua link tải trực tiếp (có thanh tiến trình), lỗi thì chuyển sang iframe preview thu gọn kèm ghi chú |
 
 > [!IMPORTANT]
 > File Google Drive phải chia sẻ ở chế độ "Bất kỳ ai có đường liên kết".
@@ -51,12 +51,13 @@ Một file HTML duy nhất. Không framework, không build, không backend.
 | **Playlist** | Thêm, xóa, sửa tên / ca sĩ, chống trùng link, bài trước / sau, tự chuyển bài |
 | **Nhiều playlist** | Đã có ở lớp dữ liệu và API (tạo, đổi tên, xóa, chuyển, chuyển bài giữa các list). **Chưa có giao diện quản lý**, xem mục Kế hoạch |
 | **Metadata tự động** | oEmbed (YouTube, SoundCloud), thẻ ID3 và ước tính bitrate với mp3 trực tiếp |
+| **Thanh tiến trình** | Với nguồn `<audio>` (mp3 trực tiếp, Google Drive khi phát được): thanh chia ô vuông, hiển thị `mm:ss / mm:ss`, bấm hoặc kéo để tua (chuột và cảm ứng), phím ← → tua 5 giây, Home / End. Chưa có cho YouTube và SoundCloud |
 | **Add link file trên máy** | Bị chặn kèm thông báo rõ ràng. Nút **Play** vẫn phát tạm, không lưu vào playlist |
 | **Âm lượng** | Thanh chia ô vuông như thanh máu game. Trên thiết bị không cho web chỉnh âm lượng (iOS) sẽ ẩn kèm ghi chú, xem mục Hạn chế |
 | **Hẹn giờ tắt** | 15 / 30 / 45 / 60 / 90 phút (chưa lưu qua lần tải lại trang) |
 | **Xuất / nhập JSON** | Xuất tất cả playlist (`v:2`), nhập được cả `v:1` lẫn `v:2`, bỏ bài trùng |
 | **Media Session** | Điều khiển từ màn hình khóa, phím media |
-| **Giao diện** | Theme tối cố định, bóng đổ cứng, nút lún khi nhấn, icon SVG ăn theo màu theme, tam giác play nhấp nháy ở bài đang phát |
+| **Giao diện** | Theme tối cố định, bóng đổ cứng, nút lún khi nhấn, icon SVG ăn theo màu theme (riêng ♪ ở tiêu đề vẫn là ký tự Unicode cho tới khi có logo), tam giác play nhấp nháy ở bài đang phát, dòng bài đang phát sáng lên và tự cuộn khung danh sách tới đúng bài, ghi chú cuối trang là mục "Tips & notes" thu gọn (bấm để mở), số phiên bản hiển thị ở header |
 | **Scanline** | Hiệu ứng CRT có sẵn, tắt mặc định |
 | **I18N** | Toàn bộ chữ giao diện gom trong một khối, dễ thêm ngôn ngữ |
 
@@ -148,7 +149,7 @@ Quy tắc nhập:
 Mỗi lúc chỉ có một trình phát hoạt động.
 
 > [!NOTE]
-> Chế độ `mini` vẫn dùng được nhưng **không được phát triển thêm**. Mọi cải tiến giao diện chỉ áp dụng cho chế độ `full`.
+> Chế độ `mini` vẫn dùng được nhưng **không được phát triển thêm**. Mọi cải tiến giao diện chỉ áp dụng cho chế độ `full`. Vì vậy ở chế độ `mini`, mp3 không còn thanh điều khiển gốc của trình duyệt và cũng không có thanh tiến trình mới (vẫn còn nút phát / tạm dừng, bài trước / sau).
 
 <details>
 <summary><b>API công khai <code>window.MusicPlayer</code></b></summary>
@@ -232,7 +233,7 @@ Thêm một khối CSS `.mp[data-theme="tên"]` chứa các biến `--mp-*`, r�
 2. Chất lượng âm thanh chỉ ước tính được với mp3 trực tiếp.
 3. File nhạc trên máy (ví dụ `D:/bai.mp3`) không thêm được vào playlist vì trang web không đọc được đường dẫn ổ đĩa, chỉ **Play** tạm được.
 4. Google Drive có thể không phát trực tiếp được, khi đó dùng iframe preview của Google (giao diện riêng, không tua được, không đổi tốc độ được).
-5. Mp3 trực tiếp đang dùng thanh điều khiển gốc của trình duyệt. YouTube và SoundCloud chưa có thanh tiến trình, chưa tua được.
+5. YouTube và SoundCloud chưa có thanh tiến trình, chưa tua được.
 6. Metadata YouTube / SoundCloud phụ thuộc oEmbed của bên thứ ba, thiếu mạng hoặc bị chặn thì không lấy được.
 7. **iPhone (lỗi đã biết, chưa sửa):**
    - Hết bài không tự chuyển sang bài kế tiếp mà dừng hẳn.
@@ -247,10 +248,10 @@ Thêm một khối CSS `.mp[data-theme="tên"]` chứa các biến `--mp-*`, r�
 
 Theo thứ tự dự kiến:
 
-- [ ] Làm sáng dòng bài đang phát trong playlist
-- [ ] Hiển thị số phiên bản ở header
-- [ ] Đổi nốt các ký tự Unicode còn lại sang SVG
-- [ ] Thanh tiến trình ô vuông cho mp3, khung Drive gọn
+- [x] Làm sáng dòng bài đang phát trong playlist
+- [x] Hiển thị số phiên bản ở header
+- [x] Đổi nốt các ký tự Unicode còn lại sang SVG (♪ ở tiêu đề giữ lại cho tới khi có logo)
+- [x] Thanh tiến trình ô vuông cho mp3, khung Drive gọn
 - [ ] Thanh tiến trình và tua cho YouTube / SoundCloud
 - [ ] Chỉnh tốc độ phát
 - [ ] Giao diện quản lý playlist (tạo, đổi tên, xóa, chuyển bài giữa các list)
