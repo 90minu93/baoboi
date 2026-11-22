@@ -215,7 +215,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   'use strict';
   var KEY = 'musicplayer-v2';
   var KEY_V1 = 'musicplayer-v1'; /* old format: only read once to migrate, never written or deleted */
-  var VERSION = '1.3.5'; /* single source for MusicPlayer.version and the header */
+  var VERSION = '1.3.6'; /* single source for MusicPlayer.version and the header */
   var YT_ORIGIN = 'https://www.youtube.com';
   var SLEEP_OPTS = [0,15,30,45,60,90];
   var AUDIO_RE = /\.(mp3|m4a|aac|ogg|oga|opus|wav|webm|flac)(\?|#|$)/i;
@@ -493,7 +493,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   /* ---------- instance ---------- */
   var R = null;
   var O = {mode:'full', lang:'en', theme:'dark'};
-  var MP = {kind:'', el:null, sc:null, playing:false, item:null, pasted:null, ytState:null, ytReady:false, edit:null, seeking:false, seekT:0};
+  var MP = {kind:'', el:null, sc:null, playing:false, item:null, pasted:null, ytState:null, ytReady:false, edit:null, seeking:false, seekT:0, pos:0, dur:0, hold:0, mdur:0};
   var sleepAt = 0, sleepTick = null, toastT = null;
   function q(n){ return R && R.querySelector('[data-mp="'+n+'"]'); }
   function t(k){ var d = I18N[O.lang]; return (d && d[k]) || I18N.en[k] || k; }
@@ -611,11 +611,42 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     function p(n){ return n<10 ? '0'+n : ''+n; }
     return h ? h+':'+p(m)+':'+p(x) : p(m)+':'+p(x);
   }
-  function audioEl(){ return MP.kind==='audio' ? MP.el : null; }
+  /* one progress bar for every source: each source supplies position, duration and a seek function (seconds).
+     audio reads the <audio> element; yt and sc keep MP.pos / MP.dur, filled from their player messages. */
+  function progDur(){
+    var k = MP.kind;
+    if(k==='audio') return durOf(MP.el);
+    if(k==='yt' || k==='sc') return MP.dur>0 && isFinite(MP.dur) ? MP.dur : 0;
+    return 0;
+  }
+  function progPos(){
+    if(MP.kind==='audio') return MP.el ? MP.el.currentTime : 0;
+    return MP.kind==='yt' || MP.kind==='sc' ? (MP.pos || 0) : 0;
+  }
+  /* yt and sc seek asynchronously and may still report the old position for a moment: ignore their position updates for 0.8 s after a seek (MP.hold) */
+  function progSeek(s){
+    var k = MP.kind;
+    if(k==='audio' && MP.el) MP.el.currentTime = s;
+    else if(k==='yt'){ MP.pos = s; MP.hold = Date.now()+800; ytCmd('seekTo',[s,true]); }
+    else if(k==='sc' && MP.sc){ MP.pos = s; MP.hold = Date.now()+800; MP.sc.seekTo(s*1000); }
+  }
+  function progBy(dt){
+    var d = progDur(); if(!d) return;
+    progSeek(Math.max(0, Math.min(d, progPos()+dt))); updProg(); mediaPos();
+  }
+  /* Media Session position (lock screen scrubber); called on play/pause, after seeks and when the duration changes, not on every tick */
+  function mediaPos(){
+    if(!('mediaSession' in navigator) || typeof navigator.mediaSession.setPositionState!=='function') return;
+    try{
+      var d = progDur();
+      if(!d){ navigator.mediaSession.setPositionState(); return; }
+      navigator.mediaSession.setPositionState({duration:d, position:Math.max(0, Math.min(d, progPos())), playbackRate:(MP.kind==='audio' && MP.el && MP.el.playbackRate) || 1});
+    }catch(e){}
+  }
   function durOf(a){ var d = a && a.duration; return d && isFinite(d) && d>0 ? d : 0; }
   function updProg(){
     if(!R) return;
-    var a = audioEl(), d = durOf(a), c = MP.seeking ? MP.seekT : (a ? a.currentTime : 0), sk = q('seek');
+    var d = progDur(), c = MP.seeking ? MP.seekT : progPos(), sk = q('seek');
     if(!(c>0)) c = 0;
     if(d && c>d) c = d;
     sk.style.setProperty('--mp-prog', (d ? c/d*100 : 0)+'%');
@@ -627,19 +658,20 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   }
   /* called from updPlay (every mount/clear path goes through it): bar only while the source is <audio> */
   function syncProg(){
-    var au = MP.kind==='audio';
-    q('prog').hidden = !au; frame().classList.toggle('mp-aud', au);
-    if(!au) MP.seeking = false;
+    var k = MP.kind, au = k==='audio', d = progDur(), show = au || ((k==='yt' || k==='sc') && d>0);
+    q('prog').hidden = !show; frame().classList.toggle('mp-aud', au);
+    if(!show) MP.seeking = false;
+    if(d!==MP.mdur){ MP.mdur = d; mediaPos(); }
     updProg();
   }
   function bindSeek(el){
     function pos(e){
-      var d = durOf(audioEl()), r = el.getBoundingClientRect();
+      var d = progDur(), r = el.getBoundingClientRect();
       if(!d || !r.width) return false;
       MP.seekT = d * Math.max(0, Math.min(1, (e.clientX - r.left)/r.width)); updProg(); return true;
     }
     el.addEventListener('pointerdown', function(e){
-      if((e.pointerType==='mouse' && e.button!==0) || !durOf(audioEl())) return;
+      if((e.pointerType==='mouse' && e.button!==0) || !progDur()) return;
       MP.seeking = true;
       try{ el.setPointerCapture(e.pointerId); }catch(_){}
       pos(e);
@@ -647,25 +679,25 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     el.addEventListener('pointermove', function(e){ if(MP.seeking) pos(e); });
     function end(e, commit){
       if(!MP.seeking) return;
-      var ok = commit && pos(e), a = audioEl();
+      var ok = commit && pos(e);
       MP.seeking = false;
       try{ el.releasePointerCapture(e.pointerId); }catch(_){}
-      if(ok && a) a.currentTime = MP.seekT;
+      if(ok){ progSeek(MP.seekT); mediaPos(); }
       updProg();
     }
     el.addEventListener('pointerup', function(e){ end(e, true); });
     el.addEventListener('pointercancel', function(e){ end(e, false); });
     el.addEventListener('lostpointercapture', function(e){ end(e, false); });
     el.addEventListener('keydown', function(e){
-      var a = audioEl(), d = durOf(a), n;
+      var d = progDur(), c = progPos(), n;
       if(!d) return;
-      if(e.key==='ArrowLeft') n = a.currentTime - 5;
-      else if(e.key==='ArrowRight') n = a.currentTime + 5;
+      if(e.key==='ArrowLeft') n = c - 5;
+      else if(e.key==='ArrowRight') n = c + 5;
       else if(e.key==='Home') n = 0;
       else if(e.key==='End') n = d;
       else return;
       e.preventDefault();
-      a.currentTime = Math.max(0, Math.min(d, n)); updProg();
+      progSeek(Math.max(0, Math.min(d, n))); updProg(); mediaPos();
     });
   }
   function sleepText(){ return sleepAt ? t('left').replace('{m}', Math.max(1, Math.ceil((sleepAt-Date.now())/60000))) : ''; }
@@ -677,6 +709,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     q('mini').title = [nowTitle(), sleepText()].filter(Boolean).join(' · ') || lbl;
     q('bplay').title = lbl;
     if('mediaSession' in navigator) try{ navigator.mediaSession.playbackState = on ? 'playing' : (MP.kind ? 'paused' : 'none'); }catch(e){}
+    mediaPos();
   }
   function renderPlaylist(){
     if(!R) return;
@@ -718,7 +751,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   function clearPlayer(){
     if(MP.kind==='audio' && MP.el){ var old = MP.el; MP.el = null; try{ old.pause(); old.removeAttribute('src'); old.load(); }catch(e){} }
     if(R) frame().innerHTML = '';
-    MP.kind=''; MP.el=null; MP.sc=null; MP.playing=false; updPlay();
+    MP.kind=''; MP.el=null; MP.sc=null; MP.playing=false; MP.pos=0; MP.dur=0; MP.hold=0; updPlay();
   }
   function onEnded(){
     if(MP.item && S.list.length>1) step(1);
@@ -771,6 +804,13 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     if(!MP.ytReady){ MP.ytReady = true; ytCmd('setVolume',[S.vol]); }
     var vd = d.info && d.info.videoData;
     if(vd && (vd.title || vd.author)) gotMeta({name:vd.title, artist:cleanArtist(vd.author)});
+    /* progress: infoDelivery / initialDelivery carry currentTime and duration (seconds) once we are listening; no duration (e.g. live) = no bar */
+    var inf = d.info && typeof d.info==='object' ? d.info : null;
+    if(inf){
+      if(typeof inf.duration==='number' && isFinite(inf.duration) && inf.duration>0) MP.dur = inf.duration;
+      if(typeof inf.currentTime==='number' && isFinite(inf.currentTime) && !MP.seeking && Date.now()>=MP.hold) MP.pos = inf.currentTime;
+      if(typeof inf.duration==='number' || typeof inf.currentTime==='number') syncProg();
+    }
     var st = d.event==='onStateChange' ? d.info : (d.info && d.info.playerState);
     if(typeof st!=='number' || st===MP.ytState) return;
     MP.ytState = st;
@@ -795,6 +835,10 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     var a = s.artwork_url || (s.user && s.user.avatar_url) || '';
     return a ? a.replace('-large','-t200x200') : '';
   }
+  /* Widget API times are in milliseconds, the bar works in seconds */
+  function scDur(w, f){
+    w.getDuration(function(ms){ if(MP.el===f && typeof ms==='number' && ms>0){ MP.dur = ms/1000; syncProg(); } });
+  }
   function mountSc(u){
     frame().innerHTML = '<iframe class="mp-hide" src="https://w.soundcloud.com/player/?url='+encodeURIComponent(u)+'&auto_play=true&visual=false&show_artwork=false&buying=false&sharing=false" title="'+esc(t('sc'))+'" allow="autoplay" tabindex="-1" aria-hidden="true"></iframe>';
     var f = frame().firstChild;
@@ -804,12 +848,18 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
       var w = window.SC.Widget(f), E = window.SC.Widget.Events; MP.sc = w;
       w.bind(E.READY, function(){
         if(MP.el!==f) return;
-        w.setVolume(S.vol); w.play();
+        w.setVolume(S.vol); w.play(); scDur(w, f);
         w.getCurrentSound(function(s){ if(MP.el===f && s) gotMeta({name:s.title, artist:s.user && s.user.username, thumb:scArt(s)}); });
       });
       w.bind(E.PLAY, function(){ if(MP.el===f){ MP.playing=true; updPlay(); } });
       w.bind(E.PAUSE, function(){ if(MP.el===f){ MP.playing=false; updPlay(); } });
       w.bind(E.FINISH, function(){ if(MP.el===f){ MP.playing=false; updPlay(); onEnded(); } });
+      w.bind(E.PLAY_PROGRESS, function(x){
+        if(MP.el!==f || !x) return;
+        if(typeof x.currentPosition==='number' && !MP.seeking && Date.now()>=MP.hold) MP.pos = x.currentPosition/1000;
+        if(!MP.dur) scDur(w, f);
+        syncProg();
+      });
     });
   }
   function mountDrive(id){
@@ -837,7 +887,10 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     try{
       var i = curInfo(), title = nowTitle();
       navigator.mediaSession.metadata = title ? new MediaMetadata({title:title, artist:i.artist || siteOf(i.url), album:t('title'), artwork:i.thumb ? [{src:i.thumb}] : []}) : null;
-      var h = {play:function(){ if(!MP.playing) toggle(); }, pause:function(){ if(MP.playing) pause(); }, previoustrack:function(){ step(-1); }, nexttrack:function(){ step(1); }};
+      var h = {play:function(){ if(!MP.playing) toggle(); }, pause:function(){ if(MP.playing) pause(); }, previoustrack:function(){ step(-1); }, nexttrack:function(){ step(1); },
+        seekto:function(d){ var x = d && d.seekTime, D = progDur(); if(D && typeof x==='number' && isFinite(x)){ progSeek(Math.max(0, Math.min(D, x))); updProg(); mediaPos(); } },
+        seekforward:function(d){ progBy((d && d.seekOffset) || 10); },
+        seekbackward:function(d){ progBy(-((d && d.seekOffset) || 10)); }};
       Object.keys(h).forEach(function(k){ try{ navigator.mediaSession.setActionHandler(k, h[k]); }catch(e){} });
     }catch(e){}
   }
