@@ -215,9 +215,10 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   'use strict';
   var KEY = 'musicplayer-v2';
   var KEY_V1 = 'musicplayer-v1'; /* old format: only read once to migrate, never written or deleted */
-  var VERSION = '1.3.6'; /* single source for MusicPlayer.version and the header */
+  var VERSION = '1.3.7'; /* single source for MusicPlayer.version and the header */
   var YT_ORIGIN = 'https://www.youtube.com';
   var SLEEP_OPTS = [0,15,30,45,60,90];
+  var RATES = [0.75,1,1.25,1.5,2]; /* playback speeds; anything else is normalized to 1 */
   var AUDIO_RE = /\.(mp3|m4a|aac|ogg|oga|opus|wav|webm|flac)(\?|#|$)/i;
   var DRIVE_RE = /drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:[^#]*&)?id=)([A-Za-z0-9_-]{20,})/;
   var SC_RE = /^https?:\/\/(?:www\.|m\.|on\.)?soundcloud\.com\/[^\s]+/i;
@@ -235,6 +236,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
         blocked:'Browser blocked autoplay, press Play',
         title:'Retro Player',heading:'♪ Retro Player',byline:'Player by 90minutes',verWord:'version',menu:'♪ Music',link:'Link',site:'Link',yt:'YouTube',sc:'SoundCloud',gd:'Google Drive',
         seek:'Seek',driveNote:'Playing via Drive preview, seeking unavailable',
+        speed:'Speed',speedSc:'SoundCloud doesn’t support speed control',speedDrive:'Drive preview doesn’t support speed control',
         notesTitle:'Tips & notes',
         hintStore:'The playlist is stored in this browser. To use it elsewhere: Export JSON here, then Import JSON there.',
         hintMeta:'Title, artist and cover are fetched when you add a track (set them yourself with {pencil} for Drive).',
@@ -247,6 +249,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   var THEMES = ['dark'];
   function normLang(l){ return typeof l==='string' && Object.prototype.hasOwnProperty.call(I18N, l) ? l : 'en'; }
   function normTheme(x){ return THEMES.indexOf(x)>=0 ? x : 'dark'; }
+  function normRate(x){ return typeof x==='number' && RATES.indexOf(x)>=0 ? x : 1; }
 
   /* ---------- state (localStorage) ---------- */
   function safeThumb(s){ return typeof s==='string' && /^(https?:\/\/|data:image\/)/i.test(s) ? s : ''; }
@@ -262,7 +265,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   /* fields carried over from v1 with the same meaning (idx = position of the current track in the selected playlist) */
   function baseState(s){
     return {idx:typeof s.idx==='number'?s.idx:-1, vol:typeof s.vol==='number'?s.vol:80, plOpen:s.plOpen!==false,
-            url:typeof s.url==='string'?s.url:'', lang:s.lang, theme:s.theme};
+            url:typeof s.url==='string'?s.url:'', lang:s.lang, theme:s.theme, rate:normRate(s.rate)};
   }
   /* v2 = {v:2, lists:[{id,name,list:[tracks]}], cur:<selected playlist id>, idx, vol, plOpen, url, lang, theme}; null when unusable */
   function fromV2(s){
@@ -289,7 +292,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   }
   function serialize(st){
     return {v:2, lists:st.lists.map(function(pl){ return {id:pl.id, name:pl.name, list:pl.list.map(pick)}; }), cur:st.cur,
-            idx:st.idx, vol:st.vol, plOpen:st.plOpen, url:st.url, lang:st.lang, theme:st.theme};
+            idx:st.idx, vol:st.vol, plOpen:st.plOpen, url:st.url, lang:st.lang, theme:st.theme, rate:st.rate};
   }
   /* S.list is always the track array of the selected playlist, so the rest of the code keeps working on it */
   function loadState(){
@@ -493,7 +496,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   /* ---------- instance ---------- */
   var R = null;
   var O = {mode:'full', lang:'en', theme:'dark'};
-  var MP = {kind:'', el:null, sc:null, playing:false, item:null, pasted:null, ytState:null, ytReady:false, edit:null, seeking:false, seekT:0, pos:0, dur:0, hold:0, mdur:0};
+  var MP = {kind:'', el:null, sc:null, playing:false, item:null, pasted:null, ytState:null, ytReady:false, edit:null, seeking:false, seekT:0, pos:0, dur:0, hold:0, mdur:0, ytRates:null, ytRate:0};
   var sleepAt = 0, sleepTick = null, toastT = null;
   function q(n){ return R && R.querySelector('[data-mp="'+n+'"]'); }
   function t(k){ var d = I18N[O.lang]; return (d && d[k]) || I18N.en[k] || k; }
@@ -525,6 +528,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     imp:svg('M3 1h10v1.5H3zM8 4l4 4.5H9V15H7V8.5H4z'),
     link:svg('M6 3h7v7h-1.5V5.6L4.6 12.5 3.5 11.4 10.4 4.5H6z'),
     vol:svgR('<path d="M2 6h3l4-3.5v11L5 10H2z"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.5a6.3 6.3 0 0 1 0 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'),
+    speed:svgR('<path d="M6 1h4v1.5H6z"/><circle cx="8" cy="9" r="5.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 9.2L10.6 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'),
     down:svg('M3 5h10L8 11z'),
     right:svg('M5 3v10l6-5z'),
     note:svgR('<path d="M6 2.5L13 1v9.5h-1.5V3.3L7.5 4.3V12H6z"/><circle cx="4.5" cy="12" r="2.2"/><circle cx="11" cy="10.5" r="2.2"/>')
@@ -543,6 +547,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
       '<div class="mp-row"><button type="button" class="mp-btn mp-pri mp-sm" data-mp="play"></button><button type="button" class="mp-btn mp-sm" data-mp="stop"></button><button type="button" class="mp-btn mp-sm" data-mp="add"></button><a class="mp-btn mp-sm" data-mp="link" target="_blank" rel="noopener noreferrer"></a></div>'+
       '<div class="mp-row" data-mp="volRow"><label data-mp="volL"></label><input type="range" data-mp="vol" min="0" max="100" step="5"><span class="mp-hint" data-mp="volV" style="margin:0;min-width:38px"></span></div>'+
       '<p class="mp-hint" data-mp="volNote" hidden></p>'+
+      '<div class="mp-row"><label data-mp="rateL"></label><select data-mp="rate">'+RATES.map(function(r){ return '<option value="'+r+'"></option>'; }).join('')+'</select><span class="mp-hint" data-mp="rateNote" style="margin:0"></span></div>'+
       '<div class="mp-row"><label data-mp="sleepL"></label><select data-mp="sleep">'+SLEEP_OPTS.map(function(m){ return '<option value="'+m+'"></option>'; }).join('')+'</select><span class="mp-hint" data-mp="sleepLeft" style="margin:0"></span></div>'+
       '<div class="mp-row mp-sp"><span class="mp-grp"><button type="button" class="mp-btn mp-sm" data-mp="plTog"></button><strong style="font-size:13px"><span data-mp="plT"></span> (<span data-mp="plN">0</span>)</strong></span><span class="mp-grp"><button type="button" class="mp-btn mp-sm" data-mp="prev">'+ICON.prev+'</button><button type="button" class="mp-btn mp-sm" data-mp="next">'+ICON.next+'</button></span></div>'+
       '<ol class="mp-pl" data-mp="list"></ol>'+
@@ -584,6 +589,9 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     var vl = volLocked(); q('volRow').hidden = vl; q('volNote').hidden = !vl; q('volNote').textContent = t('volNote');
     q('sleepL').innerHTML = ICON.moon + esc(t('sleep')); q('sleep').setAttribute('aria-label', t('sleep'));
     Array.prototype.forEach.call(q('sleep').options, function(o){ o.textContent = +o.value ? o.value+' '+t('min') : t('off'); });
+    q('rateL').innerHTML = ICON.speed + esc(t('speed')); q('rate').setAttribute('aria-label', t('speed'));
+    Array.prototype.forEach.call(q('rate').options, function(o){ o.textContent = o.value+'x'; });
+    q('rate').value = String(S.rate);
     q('plT').textContent = t('pl'); q('empty').textContent = t('empty');
     ['prev','bprev'].forEach(function(n){ q(n).setAttribute('aria-label', t('prev')); q(n).title = t('prev'); });
     ['next','bnext'].forEach(function(n){ q(n).setAttribute('aria-label', t('next')); q(n).title = t('next'); });
@@ -640,7 +648,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     try{
       var d = progDur();
       if(!d){ navigator.mediaSession.setPositionState(); return; }
-      navigator.mediaSession.setPositionState({duration:d, position:Math.max(0, Math.min(d, progPos())), playbackRate:(MP.kind==='audio' && MP.el && MP.el.playbackRate) || 1});
+      navigator.mediaSession.setPositionState({duration:d, position:Math.max(0, Math.min(d, progPos())), playbackRate:effRate()});
     }catch(e){}
   }
   function durOf(a){ var d = a && a.duration; return d && isFinite(d) && d>0 ? d : 0; }
@@ -703,7 +711,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   function sleepText(){ return sleepAt ? t('left').replace('{m}', Math.max(1, Math.ceil((sleepAt-Date.now())/60000))) : ''; }
   function updPlay(){
     if(!R) return;
-    syncProg(); var on = MP.playing, lbl = t(on?'pause':'resume');
+    syncProg(); updRate(); var on = MP.playing, lbl = t(on?'pause':'resume');
     [q('mini'), q('bplay')].forEach(function(b){ b.innerHTML = on ? ICON.pause : ICON.play; b.setAttribute('aria-label', lbl); });
     q('mini').classList.toggle('mp-on', on);
     q('mini').title = [nowTitle(), sleepText()].filter(Boolean).join(' · ') || lbl;
@@ -764,7 +772,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   }
   function mountAudio(src){
     var a = document.createElement('audio');
-    a.preload = 'auto'; a.src = src; a.volume = S.vol/100;
+    a.preload = 'auto'; a.src = src; a.volume = S.vol/100; setAudioRate(a);
     a.loop = !(MP.item && S.list.length>1);
     a.addEventListener('play', function(){ if(MP.el===a){ MP.playing=true; updPlay(); } });
     a.addEventListener('pause', function(){ if(MP.el===a){ MP.playing=false; updPlay(); } });
@@ -786,13 +794,14 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   function mountYt(id){
     frame().innerHTML = '<iframe class="mp-hide" src="'+YT_ORIGIN+'/embed/'+id+'?autoplay=1&rel=0&playsinline=1&enablejsapi=1&origin='+encodeURIComponent(location.origin)+'" title="'+esc(t('yt'))+'" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" tabindex="-1" aria-hidden="true"></iframe>';
     var f = frame().firstChild;
-    MP.kind='yt'; MP.el=f; MP.playing=true; MP.ytState=null; MP.ytReady=false; updPlay();
+    MP.kind='yt'; MP.el=f; MP.playing=true; MP.ytState=null; MP.ytReady=false; MP.ytRates=null; MP.ytRate=0; updPlay();
     f.addEventListener('load', function(){
       var n = 0;
       (function ping(){
         if(MP.el!==f || MP.ytReady || n++>10) return;
         ytPost({event:'listening', id:'musicplayer', channel:'widget'});
         ytCmd('setVolume',[S.vol]);
+        ytApplyRate();
         setTimeout(ping, 500);
       })();
     });
@@ -801,7 +810,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     if(MP.kind!=='yt' || !MP.el || e.source!==MP.el.contentWindow) return;
     var d; try{ d = typeof e.data==='string' ? JSON.parse(e.data) : e.data; }catch(_){ return; }
     if(!d) return;
-    if(!MP.ytReady){ MP.ytReady = true; ytCmd('setVolume',[S.vol]); }
+    if(!MP.ytReady){ MP.ytReady = true; ytCmd('setVolume',[S.vol]); ytApplyRate(); ytCmd('getAvailablePlaybackRates'); }
     var vd = d.info && d.info.videoData;
     if(vd && (vd.title || vd.author)) gotMeta({name:vd.title, artist:cleanArtist(vd.author)});
     /* progress: infoDelivery / initialDelivery carry currentTime and duration (seconds) once we are listening; no duration (e.g. live) = no bar */
@@ -810,6 +819,10 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
       if(typeof inf.duration==='number' && isFinite(inf.duration) && inf.duration>0) MP.dur = inf.duration;
       if(typeof inf.currentTime==='number' && isFinite(inf.currentTime) && !MP.seeking && Date.now()>=MP.hold) MP.pos = inf.currentTime;
       if(typeof inf.duration==='number' || typeof inf.currentTime==='number') syncProg();
+      if(Array.isArray(inf.availablePlaybackRates)){
+        var ar = inf.availablePlaybackRates.filter(function(x){ return typeof x==='number' && x>0; });
+        if(ar.length && ar.join()!==(MP.ytRates||[]).join()){ MP.ytRates = ar; ytApplyRate(); }
+      }
     }
     var st = d.event==='onStateChange' ? d.info : (d.info && d.info.playerState);
     if(typeof st!=='number' || st===MP.ytState) return;
@@ -957,6 +970,32 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     if(MP.kind==='audio' && MP.el) MP.el.volume = S.vol/100;
     if(MP.kind==='sc' && MP.sc) MP.sc.setVolume(S.vol);
     ytCmd('setVolume',[S.vol]);
+  }
+  /* ---------- playback speed: S.rate (one of RATES) applies to <audio> and YouTube; SoundCloud and the Drive preview iframe cannot change speed ---------- */
+  function effRate(){ return MP.kind==='audio' ? S.rate : (MP.kind==='yt' ? (MP.ytRate || S.rate) : 1); }
+  function setAudioRate(a){
+    a.defaultPlaybackRate = S.rate; a.playbackRate = S.rate;
+    ['preservesPitch','webkitPreservesPitch','mozPreservesPitch'].forEach(function(p){ if(p in a) a[p] = true; });
+  }
+  /* YouTube: use the nearest rate it reports as available; until the list arrives send the chosen rate as is (all five are supported) */
+  function ytApplyRate(){
+    var r = S.rate, prev = MP.ytRate;
+    if(MP.ytRates && MP.ytRates.length) r = MP.ytRates.reduce(function(b,x){ return Math.abs(x-r)<Math.abs(b-r) ? x : b; }, MP.ytRates[0]);
+    MP.ytRate = r; ytCmd('setPlaybackRate',[r]);
+    if(prev!==r) mediaPos();
+  }
+  function updRate(){
+    var k = MP.kind, lock = k==='sc' || k==='drive', sel = q('rate');
+    if(!sel) return;
+    sel.disabled = lock;
+    q('rateNote').textContent = lock ? t(k==='sc' ? 'speedSc' : 'speedDrive') : '';
+  }
+  function setRate(x){
+    S.rate = normRate(x); save();
+    if(R) q('rate').value = String(S.rate);
+    if(MP.kind==='audio' && MP.el) setAudioRate(MP.el);
+    else if(MP.kind==='yt') ytApplyRate();
+    mediaPos();
   }
   /* hẹn giờ tắt: không lưu, reload trang là reset */
   function sleepCheck(){
@@ -1121,7 +1160,8 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     else if(e.target===q('vol')) setVol(e.target.value);
   }
   function onChange(e){
-    if(e.target===q('sleep')) setSleep(+e.target.value);
+    if(e.target===q('rate')) setRate(+e.target.value);
+    else if(e.target===q('sleep')) setSleep(+e.target.value);
     else if(e.target===q('file')){
       var f = e.target.files && e.target.files[0]; e.target.value = ''; if(!f) return;
       f.text().then(function(txt){ var n = importData(txt); toast(n<0 ? t('impBad') : t('impOk').replace('{n}', n)); });
@@ -1173,11 +1213,11 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     add: function(url, name){ return addTrack(url, name); },
     setLang: function(l){ O.lang = normLang(l); applyAll(); },
     setTheme: function(th){ O.theme = normTheme(th); applyTheme(); },
-    setVolume: setVol, setSleep: setSleep,
+    setVolume: setVol, setSleep: setSleep, setRate: function(x){ setRate(x); return S.rate; },
     exportJSON: function(){ return JSON.stringify(exportData(), null, 2); },
     importJSON: function(x){ var n = importData(x); if(n<0) toast(t('impBad')); return n; },
     getList: function(){ return S.list.map(function(x){ return {url:x.url, name:x.name, artist:x.artist, thumb:x.thumb, quality:x.quality}; }); },
-    state: function(){ return {playing:MP.playing, kind:MP.kind, name:nowTitle()}; },
+    state: function(){ return {playing:MP.playing, kind:MP.kind, name:nowTitle(), rate:S.rate}; },
     getPlaylists: getPlaylists, createPlaylist: createPlaylist, renamePlaylist: renamePlaylist,
     deletePlaylist: deletePlaylist, switchPlaylist: switchPlaylist, moveTrack: moveTrack,
     version: VERSION
