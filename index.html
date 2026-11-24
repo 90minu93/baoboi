@@ -163,6 +163,21 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
 @keyframes mp-glow{0%,100%{text-shadow:0 0 3px var(--mp-playing-glow)}50%{text-shadow:0 0 8px var(--mp-playing-glow)}}
 @media (prefers-reduced-motion:reduce){.mp.mp-full .mp-mini-play.mp-on ~ .mp-body .mp-pl li.mp-cur .mp-pl-t{animation:none}}
 .mp.mp-full .mp-pl li.mp-cur .mp-pl-t::before{content:"";border-left-color:var(--mp-playing)}
+/* playlist manager row (select + new / rename / delete), its inline editor, and the per-track move row */
+.mp.mp-full .mp-plm select{flex:1 1 140px;min-width:0}
+.mp.mp-full .mp-plm .mp-btn{min-width:36px;min-height:36px;padding:5px 8px}
+.mp.mp-full .mp-plm-ed{margin-top:8px}
+.mp.mp-full .mp-plm-in{flex:1 1 140px;min-width:0}
+.mp.mp-full .mp-plm-q{flex:1 1 160px;margin:0;color:var(--mp-ink);overflow-wrap:anywhere}
+.mp.mp-full .mp-btn:disabled{opacity:.4;cursor:not-allowed;box-shadow:none;transform:none}
+.mp.mp-full .mp-btn:disabled:hover{border-color:var(--mp-line)}
+.mp.mp-full .mp-pl li.mp-mvrow{border-top:0;padding-top:0}
+/* track row actions (up, down, rename, move, remove): one compact group on the right; the row wraps only when it cannot fit */
+.mp.mp-full .mp-pl li{flex-wrap:wrap}
+.mp.mp-full .mp-pl-name{flex:1 1 120px}
+.mp.mp-full .mp-acts{display:flex;gap:4px;flex:none;margin-left:auto}
+.mp.mp-full .mp-acts .mp-btn.mp-sm{min-width:30px;min-height:32px;padding:3px 6px}
+.mp.mp-full .mp-pl li.mp-mvrow .mp-mv-sel{flex:1;min-width:0}
 /* toast */
 .mp.mp-full .mp-toast{font-size:12px;color:var(--mp-ink);background:var(--mp-panel);border:2px solid var(--mp-accent);border-radius:2px;box-shadow:3px 3px 0 var(--mp-shadow)}
 /* progress bar for <audio> sources (the audio has no native controls); --mp-prog = fill 0-100%, set by script. The frame holding only the hidden <audio> collapses (.mp-aud). Mini mode hides the bar. */
@@ -215,7 +230,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   'use strict';
   var KEY = 'musicplayer-v2';
   var KEY_V1 = 'musicplayer-v1'; /* old format: only read once to migrate, never written or deleted */
-  var VERSION = '1.3.7'; /* single source for MusicPlayer.version and the header */
+  var VERSION = '1.3.9'; /* single source for MusicPlayer.version and the header */
   var YT_ORIGIN = 'https://www.youtube.com';
   var SLEEP_OPTS = [0,15,30,45,60,90];
   var RATES = [0.75,1,1.25,1.5,2]; /* playback speeds; anything else is normalized to 1 */
@@ -237,6 +252,8 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
         title:'Retro Player',heading:'♪ Retro Player',byline:'Player by 90minutes',verWord:'version',menu:'♪ Music',link:'Link',site:'Link',yt:'YouTube',sc:'SoundCloud',gd:'Google Drive',
         seek:'Seek',driveNote:'Playing via Drive preview, seeking unavailable',
         speed:'Speed',speedSc:'SoundCloud doesn’t support speed control',speedDrive:'Drive preview doesn’t support speed control',
+        plAdd:'New playlist',plRen:'Rename playlist',plDel:'Delete playlist',plDelLast:'The last playlist can’t be deleted',plDelQ:'Delete “{n}” and its tracks?',plYes:'Delete',plNo:'Cancel',plSave:'Save',plName:'Playlist name',
+        mv:'Move to another playlist',mvTo:'Move to…',mvOk:'Moved to “{n}”',mvDup:'Already in that playlist',up:'Move up',dn:'Move down',
         notesTitle:'Tips & notes',
         hintStore:'The playlist is stored in this browser. To use it elsewhere: Export JSON here, then Import JSON there.',
         hintMeta:'Title, artist and cover are fetched when you add a track (set them yourself with {pencil} for Drive).',
@@ -496,7 +513,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   /* ---------- instance ---------- */
   var R = null;
   var O = {mode:'full', lang:'en', theme:'dark'};
-  var MP = {kind:'', el:null, sc:null, playing:false, item:null, pasted:null, ytState:null, ytReady:false, edit:null, seeking:false, seekT:0, pos:0, dur:0, hold:0, mdur:0, ytRates:null, ytRate:0};
+  var MP = {kind:'', el:null, sc:null, playing:false, item:null, pasted:null, ytState:null, ytReady:false, edit:null, seeking:false, seekT:0, pos:0, dur:0, hold:0, mdur:0, ytRates:null, ytRate:0, plm:'', mv:null, plSig:''};
   var sleepAt = 0, sleepTick = null, toastT = null;
   function q(n){ return R && R.querySelector('[data-mp="'+n+'"]'); }
   function t(k){ var d = I18N[O.lang]; return (d && d[k]) || I18N.en[k] || k; }
@@ -529,7 +546,11 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     link:svg('M6 3h7v7h-1.5V5.6L4.6 12.5 3.5 11.4 10.4 4.5H6z'),
     vol:svgR('<path d="M2 6h3l4-3.5v11L5 10H2z"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.5a6.3 6.3 0 0 1 0 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'),
     speed:svgR('<path d="M6 1h4v1.5H6z"/><circle cx="8" cy="9" r="5.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 9.2L10.6 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'),
+    up:svg('M3 11h10L8 5z'),
     down:svg('M3 5h10L8 11z'),
+    plus:svg('M7 2h2v5h5v2H9v5H7V9H2V7h5z'),
+    trash:svg('M5.5 1h5l.5 1.5H14V4H2V2.5h3zM3.5 5h9l-.7 9.5H4.2z'),
+    folder:svg('M1.5 3h5l1.5 1.5h6.5V13h-13z'),
     right:svg('M5 3v10l6-5z'),
     note:svgR('<path d="M6 2.5L13 1v9.5h-1.5V3.3L7.5 4.3V12H6z"/><circle cx="4.5" cy="12" r="2.2"/><circle cx="11" cy="10.5" r="2.2"/>')
   };
@@ -550,6 +571,8 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
       '<div class="mp-row"><label data-mp="rateL"></label><select data-mp="rate">'+RATES.map(function(r){ return '<option value="'+r+'"></option>'; }).join('')+'</select><span class="mp-hint" data-mp="rateNote" style="margin:0"></span></div>'+
       '<div class="mp-row"><label data-mp="sleepL"></label><select data-mp="sleep">'+SLEEP_OPTS.map(function(m){ return '<option value="'+m+'"></option>'; }).join('')+'</select><span class="mp-hint" data-mp="sleepLeft" style="margin:0"></span></div>'+
       '<div class="mp-row mp-sp"><span class="mp-grp"><button type="button" class="mp-btn mp-sm" data-mp="plTog"></button><strong style="font-size:13px"><span data-mp="plT"></span> (<span data-mp="plN">0</span>)</strong></span><span class="mp-grp"><button type="button" class="mp-btn mp-sm" data-mp="prev">'+ICON.prev+'</button><button type="button" class="mp-btn mp-sm" data-mp="next">'+ICON.next+'</button></span></div>'+
+      '<div class="mp-row mp-plm"><select data-mp="plSel"></select><button type="button" class="mp-btn mp-sm" data-mp="plNewB"></button><button type="button" class="mp-btn mp-sm" data-mp="plRenB"></button><button type="button" class="mp-btn mp-sm mp-x" data-mp="plDelB"></button></div>'+
+      '<div class="mp-row mp-plm mp-plm-ed" data-mp="plEd" hidden></div>'+
       '<ol class="mp-pl" data-mp="list"></ol>'+
       '<p class="mp-hint" data-mp="empty"></p>'+
       '<div class="mp-row"><button type="button" class="mp-btn mp-sm" data-mp="exp"></button><button type="button" class="mp-btn mp-sm" data-mp="imp"></button><input type="file" data-mp="file" accept="application/json,.json" hidden></div>'+
@@ -593,6 +616,9 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     Array.prototype.forEach.call(q('rate').options, function(o){ o.textContent = o.value+'x'; });
     q('rate').value = String(S.rate);
     q('plT').textContent = t('pl'); q('empty').textContent = t('empty');
+    q('plSel').setAttribute('aria-label', t('pl'));
+    [['plNewB','plAdd',ICON.plus],['plRenB','plRen',ICON.pencil]].forEach(function(a){ var b = q(a[0]); b.innerHTML = a[2]; b.title = t(a[1]); b.setAttribute('aria-label', t(a[1])); });
+    q('plDelB').innerHTML = ICON.trash;
     ['prev','bprev'].forEach(function(n){ q(n).setAttribute('aria-label', t('prev')); q(n).title = t('prev'); });
     ['next','bnext'].forEach(function(n){ q(n).setAttribute('aria-label', t('next')); q(n).title = t('next'); });
     q('exp').innerHTML = ICON.exp + esc(t('exp')); q('imp').innerHTML = ICON.imp + esc(t('imp')); q('notesSum').innerHTML = ICON.right + esc(t('notesTitle'));
@@ -721,7 +747,10 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   }
   function renderPlaylist(){
     if(!R) return;
-    var L = S.list, open = S.plOpen, ul = q('list');
+    var L = S.list, open = S.plOpen, ul = q('list'), pls = getPlaylists(), multi = pls.lists.length>1;
+    if(MP.mv && !L.some(function(x){ return x.id===MP.mv; })) MP.mv = null;
+    renderPlm();
+    var mvOpts = pls.lists.filter(function(p){ return p.id!==pls.current; }).map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.name)+'</option>'; }).join('');
     q('plN').textContent = L.length;
     q('plTog').innerHTML = open ? ICON.down : ICON.right;
     q('plTog').setAttribute('aria-expanded', open?'true':'false');
@@ -738,16 +767,22 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
       var th = it.thumb ? '<img src="'+esc(it.thumb)+'" alt="" loading="lazy" referrerpolicy="no-referrer">' : ICON.note;
       return '<li class="'+cls+'"'+ac+'><button type="button" class="mp-pl-name" data-i="'+i+'" title="'+nm+' — '+sub+'">'+
         '<span class="mp-th">'+th+'</span><span class="mp-pl-txt"><span class="mp-pl-t">'+nm+'</span><span class="mp-pl-s">'+sub+'</span></span></button>'+
+        '<span class="mp-acts"><button type="button" class="mp-btn mp-sm" data-up="'+i+'" aria-label="'+esc(t('up'))+'" title="'+esc(t('up'))+'"'+(i===0?' disabled':'')+'>'+ICON.up+'</button><button type="button" class="mp-btn mp-sm" data-dn="'+i+'" aria-label="'+esc(t('dn'))+'" title="'+esc(t('dn'))+'"'+(i===L.length-1?' disabled':'')+'>'+ICON.down+'</button>'+
         '<button type="button" class="mp-btn mp-sm" data-ed="'+i+'" aria-label="'+esc(t('rename'))+'" title="'+esc(t('rename'))+'">'+ICON.pencil+'</button>'+
-        '<button type="button" class="mp-btn mp-sm mp-x" data-del="'+i+'" aria-label="'+esc(t('remove'))+'" title="'+esc(t('remove'))+'">'+ICON.close+'</button></li>';
+        (multi ? '<button type="button" class="mp-btn mp-sm" data-mv="'+i+'" aria-label="'+esc(t('mv'))+'" title="'+esc(t('mv'))+'" aria-expanded="'+(MP.mv===it.id?'true':'false')+'">'+ICON.folder+'</button>' : '')+
+        '<button type="button" class="mp-btn mp-sm mp-x" data-del="'+i+'" aria-label="'+esc(t('remove'))+'" title="'+esc(t('remove'))+'">'+ICON.close+'</button></span></li>'+
+        (multi && MP.mv===it.id ? '<li class="mp-mvrow"><select class="mp-mv-sel" data-mvsel="'+i+'" aria-label="'+esc(t('mv'))+'"><option value="">'+esc(t('mvTo'))+'</option>'+mvOpts+'</select></li>' : '');
     }).join('');
     var inp = ul.querySelector('.mp-pl-in'); if(inp){ inp.focus(); inp.select(); }
   }
   /* keep the playing row visible: scrolls only the list box (never the page), and only when the row is out of view */
   function revealCur(){
     if(!R || O.mode!=='full') return;
-    var ul = q('list'), li = ul && ul.querySelector('li.mp-cur');
-    if(!li || ul.hidden) return;
+    var ul = q('list'); revealLi(ul && ul.querySelector('li.mp-cur'));
+  }
+  function revealLi(li){
+    var ul = q('list');
+    if(!li || !ul || ul.hidden) return;
     var u = ul.getBoundingClientRect(), r = li.getBoundingClientRect();
     var top = u.top + ul.clientTop, bottom = top + ul.clientHeight;
     if(r.top < top) ul.scrollTop -= top - r.top;
@@ -935,6 +970,20 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     if(playUrl(it.url)) enrich(it);
     renderNow(); renderPlaylist(); revealCur(); q('link').href = it.url;
   }
+  /* move one row up (-1) or down (+1) by splicing S.list in place (it is an alias, never reassigned); the playing track and S.idx follow their ids */
+  function moveRow(i, dir){
+    var L = S.list, j = i + dir;
+    if(!(i>=0 && i<L.length && j>=0 && j<L.length)) return;
+    var keep = MP.item || (L[S.idx] && L[S.idx].id);
+    L.splice(j, 0, L.splice(i, 1)[0]);
+    S.idx = keep ? L.findIndex(function(x){ return x.id===keep; }) : -1;
+    save(); renderPlaylist();
+    /* focus stays on the pressed button of the moved row; if it is now disabled (reached top or bottom) the other one gets it */
+    var a = dir<0 ? 'up' : 'dn', b = dir<0 ? 'dn' : 'up';
+    var btn = R.querySelector('[data-'+a+'="'+j+'"]');
+    if(!btn || btn.disabled) btn = R.querySelector('[data-'+b+'="'+j+'"]');
+    if(btn){ btn.focus({preventScroll:true}); revealLi(btn.closest('li')); }
+  }
   function step(d){
     var L = S.list; if(!L.length) return;
     var c = L.findIndex(function(x){ return x.id===MP.item; });
@@ -1021,13 +1070,13 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   }
   function createPlaylist(name){
     var pl = {id:newId(), name:uniqueName(name), list:[]};
-    S.lists.push(pl); save();
+    S.lists.push(pl); save(); renderPlm();
     return pl.id;
   }
   function renamePlaylist(id, name){
     var pl = findPl(id), nm = String(name==null?'':name).trim();
     if(!pl || !nm) return false;
-    pl.name = uniqueName(nm, pl.id); save();
+    pl.name = uniqueName(nm, pl.id); save(); renderPlm();
     return true;
   }
   /* switching stops the current playback first (simple and safe) */
@@ -1039,12 +1088,61 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     if(R){ renderNow(); renderPlaylist(); q('link').href = linkHref(); }
     return true;
   }
+  /* ---------- playlist manager UI (uses the playlist functions below; the editor row is rebuilt only on open/close so typing is never interrupted) ---------- */
+  function renderPlm(){
+    if(!R || !q('plSel')) return;
+    var pls = getPlaylists(), sel = q('plSel'), n = pls.lists.length;
+    var sig = pls.current+'|'+pls.lists.map(function(p){ return p.id+':'+p.name+':'+p.count; }).join('|');
+    if(sig!==MP.plSig){
+      MP.plSig = sig;
+      sel.innerHTML = pls.lists.map(function(p){ return '<option value="'+esc(p.id)+'">'+esc(p.name)+' ('+p.count+')</option>'; }).join('');
+      sel.value = pls.current;
+    }
+    var del = q('plDelB'), tl = t(n<2 ? 'plDelLast' : 'plDel');
+    del.disabled = n<2; del.title = tl; del.setAttribute('aria-label', tl);
+  }
+  function openPlm(mode){
+    var ed = q('plEd'), pl = findPl(S.cur);
+    if(!ed || !pl || (mode==='del' && S.lists.length<2)) return;
+    MP.plm = mode;
+    if(mode==='del'){
+      ed.innerHTML = '<span class="mp-hint mp-plm-q">'+esc(t('plDelQ').replace('{n}', pl.name))+'</span><button type="button" class="mp-btn mp-sm mp-x" data-mp="plDelOk">'+esc(t('plYes'))+'</button><button type="button" class="mp-btn mp-sm" data-mp="plCancel">'+esc(t('plNo'))+'</button>';
+      ed.hidden = false; q('plCancel').focus();
+    } else {
+      ed.innerHTML = '<input type="text" class="mp-plm-in" data-mp="plIn" maxlength="60" autocomplete="off" spellcheck="false" aria-label="'+esc(t('plName'))+'" placeholder="'+esc(mode==='new' ? t('plNew') : pl.name)+'"><button type="button" class="mp-btn mp-sm mp-pri" data-mp="plOk">'+esc(t('plSave'))+'</button><button type="button" class="mp-btn mp-sm" data-mp="plCancel">'+esc(t('plNo'))+'</button>';
+      ed.hidden = false;
+      var i = q('plIn'); if(mode==='ren') i.value = pl.name; i.focus(); i.select();
+    }
+  }
+  function closePlm(fb){
+    var m = MP.plm, ed = q('plEd'); MP.plm = '';
+    if(ed){ ed.hidden = true; ed.innerHTML = ''; }
+    if(fb && m){ var b = q(m==='new' ? 'plNewB' : m==='ren' ? 'plRenB' : 'plDelB'); if(b && !b.disabled) b.focus(); }
+  }
+  function commitPlm(){
+    var inp = q('plIn'), mode = MP.plm; if(!inp) return;
+    var v = inp.value.trim(); closePlm(true);
+    if(mode==='new') switchPlaylist(createPlaylist(v)); /* empty name: createPlaylist uses the default name */
+    else if(mode==='ren' && v) renamePlaylist(S.cur, v);
+  }
+  function confirmDelPlm(){ var id = S.cur; closePlm(); deletePlaylist(id); var s = q('plSel'); if(s) s.focus(); }
+  function closeMv(fb){
+    var id = MP.mv; MP.mv = null; renderPlaylist();
+    if(fb){ var i = S.list.findIndex(function(x){ return x.id===id; }), b = i>=0 && R.querySelector('[data-mv="'+i+'"]'); if(b) b.focus(); }
+  }
+  function moveSel(sel){
+    var it = S.list[+sel.dataset.mvsel], to = sel.value, dest = findPl(to);
+    if(!it || !dest) return;
+    if(moveTrack(it.url, S.cur, to)) toast(t('mvOk').replace('{n}', dest.name)); /* moveTrack redraws; the open row closes because the track left this list */
+    else { toast(t('mvDup')); sel.value = ''; }
+  }
+
   /* the last playlist cannot be deleted; deleting the selected one selects the first remaining */
   function deletePlaylist(id){
     var i = S.lists.indexOf(findPl(id));
     if(i<0 || S.lists.length<2) return false;
     if(id===S.cur) switchPlaylist(S.lists[i===0 ? 1 : 0].id);
-    S.lists.splice(i, 1); save();
+    S.lists.splice(i, 1); save(); renderPlm();
     return true;
   }
   /* skipped (false) when the target already has that link */
@@ -1125,6 +1223,16 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     if(n==='plTog'){ S.plOpen = !S.plOpen; save(); return renderPlaylist(); }
     if(n==='exp') return exportFile();
     if(n==='imp') return q('file').click();
+    if(n==='plNewB') return MP.plm==='new' ? closePlm(true) : openPlm('new');
+    if(n==='plRenB') return MP.plm==='ren' ? closePlm(true) : openPlm('ren');
+    if(n==='plDelB') return MP.plm==='del' ? closePlm(true) : openPlm('del');
+    if(n==='plOk') return commitPlm();
+    if(n==='plCancel') return closePlm(true);
+    if(n==='plDelOk') return confirmDelPlm();
+    var mv = e.target.closest('[data-mv]');
+    if(mv){ var mi = S.list[+mv.dataset.mv]; MP.mv = mi && MP.mv!==mi.id ? mi.id : null; renderPlaylist(); var ms = R.querySelector('.mp-mv-sel'); if(ms) ms.focus(); return; }
+    var ud = e.target.closest('[data-up],[data-dn]');
+    if(ud){ var up = ud.hasAttribute('data-up'); return moveRow(+(up ? ud.dataset.up : ud.dataset.dn), up ? -1 : 1); }
     var p = e.target.closest('[data-i]'), ed = e.target.closest('[data-ed]'), d = e.target.closest('[data-del]');
     if(p) return playItem(+p.dataset.i);
     if(ed){ MP.edit = S.list[+ed.dataset.ed].id; return renderPlaylist(); }
@@ -1146,7 +1254,10 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
     if(e.target.classList.contains('mp-pl-in')){
       if(e.key==='Enter'){ e.preventDefault(); commitRename(e.target, true); }
       else if(e.key==='Escape'){ e.preventDefault(); e.stopPropagation(); commitRename(e.target, false); }
-    } else if(e.target===q('url') && e.key==='Enter'){ e.preventDefault(); playPasted(); }
+    } else if(e.target===q('plIn') && e.key==='Enter'){ e.preventDefault(); commitPlm(); }
+    else if(e.key==='Escape' && MP.plm && e.target.closest('[data-mp="plEd"],[data-mp="plNewB"],[data-mp="plRenB"],[data-mp="plDelB"]')){ e.preventDefault(); e.stopPropagation(); closePlm(true); }
+    else if(e.key==='Escape' && MP.mv && e.target.closest('.mp-mvrow,[data-mv]')){ e.preventDefault(); e.stopPropagation(); closeMv(true); }
+    else if(e.target===q('url') && e.key==='Enter'){ e.preventDefault(); playPasted(); }
     else if(e.key==='Escape' && O.mode==='mini' && O.open){ O.open = false; applyAll(); q('tog').focus(); }
   }
   function onFocusOut(e){
@@ -1162,13 +1273,18 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   function onChange(e){
     if(e.target===q('rate')) setRate(+e.target.value);
     else if(e.target===q('sleep')) setSleep(+e.target.value);
+    else if(e.target===q('plSel')){ closePlm(); MP.mv = null; switchPlaylist(e.target.value); renderPlm(); }
+    else if(e.target.classList && e.target.classList.contains('mp-mv-sel')) moveSel(e.target);
     else if(e.target===q('file')){
       var f = e.target.files && e.target.files[0]; e.target.value = ''; if(!f) return;
       f.text().then(function(txt){ var n = importData(txt); toast(n<0 ? t('impBad') : t('impOk').replace('{n}', n)); });
     }
   }
   function onImgErr(e){ var el = e.target; if(el && el.tagName==='IMG') el.hidden = true; }
-  function onDocClick(e){ if(R && O.mode==='mini' && O.open && e.composedPath().indexOf(R)<0){ O.open = false; applyAll(); } }
+  function onDocClick(e){
+    if(R && MP.mv){ var tg = e.target; if(!(tg && tg.closest && tg.closest('.mp-mvrow,[data-mv]'))) closeMv(); }
+    if(R && O.mode==='mini' && O.open && e.composedPath().indexOf(R)<0){ O.open = false; applyAll(); }
+  }
 
   function unmount(){
     if(!R) return;
@@ -1186,7 +1302,7 @@ body:has(.mp[data-theme="dark"]){background:#0b1020}
   function mount(el, opts){
     if(typeof el==='string') el = document.querySelector(el);
     if(!el) throw new Error('MusicPlayer.mount: element not found');
-    unmount(); MP.edit = null; MP.item = null; MP.pasted = null;
+    unmount(); MP.edit = null; MP.item = null; MP.pasted = null; MP.plm = ''; MP.mv = null; MP.plSig = '';
     S = loadState(); /* migrates v1 -> v2 when needed */
     opts = opts || {};
     O = {mode: opts.mode==='mini' ? 'mini' : 'full',
