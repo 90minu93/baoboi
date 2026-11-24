@@ -4,9 +4,9 @@
 
 **Trình phát nhạc cá nhân chạy ngay trên trình duyệt, phong cách retro gamer.**
 
-![Version](https://img.shields.io/badge/version-1.3.9-5b8cff?style=flat-square)
-![Single file](https://img.shields.io/badge/single-file-ffd166?style=flat-square)
-![No build](https://img.shields.io/badge/no%20build-no%20backend-243056?style=flat-square)
+![Version](https://img.shields.io/static/v1?label=version&message=1.3.9&color=5b8cff&style=flat-square)
+![Single file](https://img.shields.io/static/v1?label=single&message=file&color=ffd166&style=flat-square)
+![No build](https://img.shields.io/static/v1?label=no%20build&message=no%20backend&color=243056&style=flat-square)
 
 [Demo](https://90minu93.github.io/baoboi/) · [Tính năng](#tính-năng) · [Cách dùng](#cách-dùng) · [Dữ liệu](#dữ-liệu-và-sao-lưu) · [Hạn chế](#hạn-chế-đã-biết) · [Kế hoạch](#kế-hoạch) · [Dùng như thư viện](#dùng-như-thư-viện)
 
